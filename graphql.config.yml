@@ -1,0 +1,6 @@
+schema:
+  - http://127.0.0.1:3000/admin-api
+  - http://127.0.0.1:3000/shop-api
+documents:
+  - "src/**/*.{ts,tsx,js,jsx}"
+  - "!src/gql/**/*"

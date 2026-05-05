@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RETAIL SALES — Vendure POS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3e;
+      --accent: #00c6ff;
+      --accent2: #7b61ff;
+      --green: #00e676;
+      --red: #ff4d6d;
+      --yellow: #ffd600;
+      --text: #e8eaf0;
+      --muted: #6b7280;
+      --input-bg: #12151f;
+      --header-bg: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
+      --row-hover: #1e2235;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── TOP TITLE BAR ── */
+    .title-bar {
+      background: linear-gradient(90deg, #7b61ff 0%, #00c6ff 100%);
+      text-align: center;
+      padding: 6px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #fff;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    /* ── HEADER FORM ── */
+    .header-form {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+      flex-shrink: 0;
+    }
+
+    .form-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+
+    .form-row:last-child { margin-bottom: 0; }
+
+    .field-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .field-input {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .field-input:focus { border-color: var(--accent); }
+    .field-input.sm { width: 70px; }
+    .field-input.md { width: 110px; }
+    .field-input.lg { width: 180px; }
+    .field-input.xl { width: 240px; }
+
+    select.field-input {
+      -moz-appearance: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .divider { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+    /* ── STATUS BADGE ── */
+    .status-badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .status-badge.connected { background: #00e67622; color: var(--green); border: 1px solid var(--green); }
+    .status-badge.disconnected { background: #ff4d6d22; color: var(--red); border: 1px solid var(--red); }
+
+    /* ── MAIN CONTENT AREA ── */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    /* ── ITEMS TABLE ── */
+    .table-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .items-table thead tr {
+      background: linear-gradient(90deg, #1e2235, #252840);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .items-table th {
+      padding: 8px 6px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      border-right: 1px solid var(--border);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .items-table th:nth-child(1) { width: 45px; text-align: center; }
+    .items-table th:nth-child(2) { width: 90px; }
+    .items-table th:nth-child(3) { }
+    .items-table th:nth-child(4) { width: 80px; text-align: right; }
+    .items-table th:nth-child(5) { width: 90px; text-align: right; }
+    .items-table th:nth-child(6) { width: 90px; text-align: right; }
+    .items-table th:nth-child(7) { width: 100px; text-align: right; }
+
+    .table-scroll {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .items-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    .items-table tbody tr:hover { background: var(--row-hover); }
+    .items-table tbody tr.selected { background: #00c6ff18; }
+
+    .items-table td {
+      padding: 5px 6px;
+      border-right: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .items-table td:first-child { text-align: center; color: var(--muted); font-size: 11px; }
+
+    .td-input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      width: 100%;
+      outline: none;
+      padding: 2px 0;
+    }
+
+    .td-input:focus {
+      background: var(--input-bg);
+      border-bottom: 1px solid var(--accent);
+      border-radius: 3px;
+      padding: 2px 4px;
+    }
+
+    .td-num {
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .remove-btn {
+      background: none;
+      border: none;
+      color: var(--red);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      transition: background 0.2s;
+      display: none;
+    }
+
+    .items-table tbody tr:hover .remove-btn { display: inline; }
+
+    /* ── ADD ROW BUTTON ── */
+    .add-row-btn {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      width: 100%;
+      padding: 8px;
+      cursor: pointer;
+      text-align: center;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .add-row-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── RIGHT PANEL ── */
+    .right-panel {
+      width: 220px;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      gap: 6px;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+    }
+
+    .summary-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .summary-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .summary-row.highlight { border-color: var(--accent); }
+    .summary-row.highlight .summary-value { color: var(--accent); }
+    .summary-row.discount .summary-value { color: var(--green); }
+    .summary-row.tax .summary-value { color: var(--yellow); }
+
+    /* ── COUPON ROW ── */
+    .coupon-area {
+      display: flex;
+      gap: 4px;
+    }
+    .coupon-input {
+      flex: 1;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+    }
+    .coupon-input:focus { border-color: var(--accent); }
+    .coupon-btn {
+      background: linear-gradient(135deg, #7b61ff, #00c6ff);
+      border: none;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .coupon-btn:hover { opacity: 0.9; }
+
+    /* ── TOTAL DISPLAY ── */
+    .total-display {
+      margin-top: auto;
+      background: linear-gradient(135deg, #00c6ff22, #7b61ff22);
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .total-label { font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+    .total-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+    .balance-label { font-size: 10px; color: var(--muted); margin-top: 6px; }
+    .balance-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    /* ── FOOTER BUTTONS ── */
+    .footer-bar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #7b61ff, #00c6ff);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ff4d6d, #ff8c6e);
+      color: #fff;
+    }
+    .btn-danger:hover { opacity: 0.85; }
+
+    .btn-success {
+      background: linear-gradient(135deg, #00c853, #00e676);
+      color: #000;
+    }
+    .btn-success:hover { opacity: 0.85; }
+
+    .btn-secondary {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-warning {
+      background: linear-gradient(135deg, #ffd600, #ff9800);
+      color: #000;
+    }
+    .btn-warning:hover { opacity: 0.85; }
+
+    .shortcut-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 4px 8px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .shortcut {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .shortcut span {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 4px;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── LOADER / TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 60px;
+      right: 20px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { background: #00e67622; border: 1px solid var(--green); color: var(--green); }
+    .toast.error { background: #ff4d6d22; border: 1px solid var(--red); color: var(--red); }
+    .toast.info { background: #00c6ff22; border: 1px solid var(--accent); color: var(--accent); }
+
+    /* ── LOGIN MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      width: 360px;
+      text-align: center;
+    }
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      background: linear-gradient(90deg, #7b61ff, #00c6ff);
+      -webkit-background-clip: text;
+    background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .modal-subtitle { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+    .modal-field { margin-bottom: 14px; text-align: left; }
+    .modal-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: block; }
+    .modal-input {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .modal-input:focus { border-color: var(--accent); }
+    .modal-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #7b61ff, #00c6ff);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-top: 8px;
+    }
+    .modal-btn:hover { opacity: 0.85; }
+
+    /* ── PRODUCT DROPDOWN ── */
+    .product-dropdown {
+      position: absolute;
+      z-index: 100;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      min-width: 280px;
+      max-height: 200px;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .product-option {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .product-option:hover { background: var(--row-hover); }
+    .product-option-name { font-size: 13px; font-weight: 500; }
+    .product-option-detail { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+    /* ── SPIN ANIMATION ── */
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN MODAL -->
+<div class="modal-overlay" id="loginModal">
+  <div class="modal-box">
+    <div class="modal-title">RETAIL SALES</div>
+    <div class="modal-subtitle">Sign in to access the POS system</div>
+    <div class="modal-field">
+      <label class="modal-label">API Mode</label>
+      <select class="modal-input" id="loginMode">
+        <option value="admin">Admin API</option>
+        <option value="shop">Shop API</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Username / Email</label>
+      <input class="modal-input" id="loginUser" type="text" value="superadmin" placeholder="superadmin" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Password</label>
+      <input class="modal-input" id="loginPass" type="password" value="superadmin" placeholder="••••••••" />
+    </div>
+    <button class="modal-btn" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- TITLE BAR -->
+<div class="title-bar">⚡ RETAIL SALES — Vendure POS</div>
+
+<!-- HEADER FORM -->
+<div class="header-form">
+  <div class="form-row">
+    <div class="field-group">
+      <span class="field-label">Bill No</span>
+      <input class="field-input sm" id="billNo" readonly placeholder="Auto" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Date</span>
+      <input class="field-input md" id="billDate" type="date" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Mode</span>
+      <select class="field-input sm" id="payMode">
+        <option>CASH</option>
+        <option>UPI</option>
+        <option>CARD</option>
+        <option>CREDIT</option>
+      </select>
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Customer</span>
+      <input class="field-input lg" id="customerField" placeholder="Search customer..." oninput="searchCustomer(this.value)" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Bill Ref</span>
+      <input class="field-input md" id="billRef" placeholder="Reference" />
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span class="status-badge disconnected" id="statusBadge">OFFLINE</span>
+      <span id="loggedUser" style="font-size: 11px; color: var(--muted);"></span>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field-group">
+      <span class="field-label">Order ID</span>
+      <input class="field-input md" id="orderId" readonly placeholder="—" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">State</span>
+      <input class="field-input sm" id="orderState" readonly placeholder="—" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Received Amt</span>
+      <input class="field-input md" id="receivedAmt" type="number" placeholder="0.00" oninput="calcBalance()" />
+    </div>
+    <div class="divider"></div>
+    <div class="field-group">
+      <span class="field-label">Remarks</span>
+      <input class="field-input xl" id="remarks" placeholder="Notes..." />
+    </div>
+  </div>
+</div>
+
+<!-- MAIN AREA -->
+<div class="main-content">
+  <!-- TABLE -->
+  <div class="table-area">
+    <div class="table-scroll">
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Code / SKU</th>
+            <th>Item Name</th>
+            <th>QTY</th>
+            <th>Rate (₹)</th>
+            <th>Amount (₹)</th>
+            <th>Total (₹)</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody">
+          <!-- rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRow()">+ Add Item Row &nbsp;[Enter]</button>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div style="font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">SUMMARY</div>
+
+    <div class="summary-row">
+      <span class="summary-label">Total Items</span>
+      <span class="summary-value" id="sumItems">0</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Sub Total</span>
+      <span class="summary-value" id="sumSubtotal">0.00</span>
+    </div>
+    <div class="summary-row tax">
+      <span class="summary-label">Tax Amount</span>
+      <span class="summary-value" id="sumTax">0.00</span>
+    </div>
+    <div class="summary-row discount">
+      <span class="summary-label">Discount</span>
+      <span class="summary-value" id="sumDiscount">0.00</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Shipping</span>
+      <span class="summary-value" id="sumShipping">0.00</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">Sal.Return Amt</span>
+      <span class="summary-value" id="sumReturn">0.00</span>
+    </div>
+    <div class="summary-row highlight">
+      <span class="summary-label">Grand Total</span>
+      <span class="summary-value" id="sumGrandTotal">0.00</span>
+    </div>
+
+    <div style="font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: 1px; margin-top: 8px; margin-bottom: 4px;">COUPON CODE</div>
+    <div class="coupon-area">
+      <input class="coupon-input" id="couponCode" placeholder="SAVE10" />
+      <button class="coupon-btn" onclick="applyCoupon()">Apply</button>
+    </div>
+    <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-top: 4px;" onclick="removeCoupon()">✕ Remove Coupon</button>
+
+    <div style="font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: 1px; margin-top: 8px; margin-bottom: 4px;">PAYMENT</div>
+    <div class="summary-row">
+      <span class="summary-label">Received</span>
+      <span class="summary-value" id="sumReceived">0.00</span>
+    </div>
+    <div class="summary-row discount">
+      <span class="summary-label">Balance</span>
+      <span class="summary-value" id="sumBalance">0.00</span>
+    </div>
+
+    <!-- TOTAL DISPLAY -->
+    <div class="total-display" style="margin-top: 12px;">
+      <div class="total-label">Total</div>
+      <div class="total-amount" id="displayTotal">0.00</div>
+      <div class="balance-label">Balance</div>
+      <div class="balance-amount" id="displayBalance">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER BUTTONS -->
+<div class="footer-bar">
+  <button class="btn btn-success" onclick="saveOrder()">💾 Save</button>
+  <button class="btn btn-danger" onclick="cancelOrder()">🗑 Delete</button>
+  <button class="btn btn-secondary" onclick="viewOrder()">👁 View</button>
+  <button class="btn btn-warning" onclick="checkout()">💳 Checkout</button>
+  <button class="btn btn-secondary" onclick="newBill()">📄 New Bill</button>
+  <button class="btn btn-secondary" onclick="printBill()">🖨 Print</button>
+  <div style="margin-left: auto; display: flex; gap: 6px;">
+    <button class="btn btn-secondary" onclick="showLoginModal()">🔐 Re-Login</button>
+    <button class="btn btn-secondary" onclick="loadActiveOrder()">🔄 Refresh</button>
+  </div>
+</div>
+
+<!-- SHORTCUT BAR -->
+<div class="shortcut-row">
+  <span class="shortcut"><span>F1</span> Save</span>
+  <span class="shortcut"><span>F2</span> New Bill</span>
+  <span class="shortcut"><span>F3</span> Coupon</span>
+  <span class="shortcut"><span>F4</span> Checkout</span>
+  <span class="shortcut"><span>F5</span> Refresh</span>
+  <span class="shortcut"><span>F9</span> Print</span>
+  <span class="shortcut"><span>Enter</span> Add Row</span>
+  <span class="shortcut"><span>Del</span> Remove Row</span>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════
+const ADMIN_API = 'http://127.0.0.1:3000/admin-api';
+const SHOP_API  = 'http://127.0.0.1:3000/shop-api';
+
+let authToken = null;
+let currentApiMode = 'shop';
+let currentOrderId = null;
+let addedCoupon = null;
+let rowCounter = 0;
+let searchTimeout = null;
+let activeSearchRow = null;
+let productDropdown = null;
+
+// ══════════════════════════════════════════════
+//  GRAPHQL FETCH
+// ══════════════════════════════════════════════
+async function gql(query, variables = {}, useAdmin = false) {
+  const url = useAdmin ? ADMIN_API : SHOP_API;
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ query, variables })
+  });
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors[0].message);
+  return json.data;
+}
+
+// ══════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════
+let toastTimer;
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ══════════════════════════════════════════════
+//  LOGIN
+// ══════════════════════════════════════════════
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value.trim();
+  const mode     = document.getElementById('loginMode').value;
+  currentApiMode = mode;
+
+  try {
+    const data = await gql(`
+      mutation Login($u: String!, $p: String!) {
+        login(username: $u, password: $p) {
+          ... on CurrentUser { id identifier }
+          ... on InvalidCredentialsError { message }
+        }
+      }
+    `, { u: username, p: password }, mode === 'admin');
+
+    const result = data.login;
+    if (result.message) throw new Error(result.message);
+
+    document.getElementById('loginModal').style.display = 'none';
+    document.getElementById('statusBadge').textContent = 'ONLINE';
+    document.getElementById('statusBadge').className = 'status-badge connected';
+    document.getElementById('loggedUser').textContent = `${result.identifier} (${mode})`;
+
+    toast(`✅ Logged in as ${result.identifier}`, 'success');
+    await loadActiveOrder();
+  } catch(e) {
+    toast(`❌ Login failed: ${e.message}`, 'error');
+  }
+}
+
+function showLoginModal() {
+  document.getElementById('loginModal').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════
+//  LOAD ACTIVE ORDER
+// ══════════════════════════════════════════════
+async function loadActiveOrder() {
+  try {
+    const data = await gql(`
+      query {
+        activeOrder {
+          id code state totalWithTax subTotalWithTax shippingWithTax
+          lines {
+            id quantity unitPriceWithTax linePriceWithTax
+            productVariant { id name sku price }
+          }
+          discounts { description amountWithTax }
+          couponCodes
+        }
+      }
+    `);
+
+    const order = data.activeOrder;
+    if (!order) { newBill(); return; }
+
+    currentOrderId = order.id;
+    document.getElementById('orderId').value = order.id;
+    document.getElementById('orderState').value = order.state;
+    document.getElementById('billNo').value = order.code || '—';
+
+    // Render lines
+    const tbody = document.getElementById('itemsBody');
+    tbody.innerHTML = '';
+    rowCounter = 0;
+    order.lines.forEach(line => {
+      const sku   = line.productVariant.sku;
+      const name  = line.productVariant.name;
+      const qty   = line.quantity;
+      const rate  = (line.unitPriceWithTax / 100).toFixed(2);
+      const total = (line.linePriceWithTax / 100).toFixed(2);
+      addRow(line.id, sku, name, qty, rate, total);
+    });
+
+    addedCoupon = order.couponCodes?.[0] || null;
+    if (addedCoupon) document.getElementById('couponCode').value = addedCoupon;
+
+    updateSummary(order);
+  } catch(e) {
+    toast(`⚠ Could not load order: ${e.message}`, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  ROWS
+// ══════════════════════════════════════════════
+function addRow(lineId = null, sku = '', name = '', qty = '', rate = '', total = '') {
+  rowCounter++;
+  const n    = rowCounter;
+  const tbody = document.getElementById('itemsBody');
+  const tr   = document.createElement('tr');
+  tr.dataset.lineId   = lineId || '';
+  tr.dataset.variantId = '';
+  tr.dataset.n        = n;
+
+  tr.innerHTML = `
+    <td>
+      ${n}
+      <button class="remove-btn" onclick="removeRow(this)" title="Remove">✕</button>
+    </td>
+    <td style="position: relative;">
+      <input class="td-input" placeholder="SKU / Code"
+        value="${sku}"
+        onfocus="this.select()"
+        oninput="onCodeInput(this, ${n})"
+        onkeydown="handleRowKey(event, this)" />
+    </td>
+    <td>
+      <input class="td-input" placeholder="Item Name" value="${name}" readonly style="color: var(--muted);" />
+    </td>
+    <td>
+      <input class="td-input" type="number" placeholder="1" value="${qty}"
+        style="text-align: right;"
+        oninput="onQtyChange(this)"
+        onkeydown="handleRowKey(event, this)" />
+    </td>
+    <td>
+      <input class="td-input" type="number" value="${rate}" readonly style="text-align: right; color: var(--muted);" />
+    </td>
+    <td><div class="td-num" id="rowAmt${n}">0.00</div></td>
+    <td><div class="td-num" id="rowTotal${n}">${total || '0.00'}</div></td>
+  `;
+
+  tbody.appendChild(tr);
+
+  if (qty && rate) {
+    const amt = (parseFloat(qty) * parseFloat(rate)).toFixed(2);
+    document.getElementById(`rowAmt${n}`).textContent = amt;
+    document.getElementById(`rowTotal${n}`).textContent = total || amt;
+  }
+
+  return tr;
+}
+
+function handleRowKey(e, input) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const row = input.closest('tr');
+    const inputs = row.querySelectorAll('input');
+    const idx    = Array.from(inputs).indexOf(input);
+    if (idx < inputs.length - 1) {
+      inputs[idx + 1].focus();
+    } else {
+      addRow();
+      const rows = document.querySelectorAll('#itemsBody tr');
+      const newRow = rows[rows.length - 1];
+      newRow.querySelector('input').focus();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+//  PRODUCT SEARCH BY CODE
+// ══════════════════════════════════════════════
+function onCodeInput(input, rowN) {
+  const term = input.value.trim();
+  closeDropdown();
+  if (!term || term.length < 1) return;
+
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => searchProducts(input, term, rowN), 350);
+}
+
+async function searchProducts(input, term, rowN) {
+  try {
+    const data = await gql(`
+      query Search($term: String!) {
+        search(input: { term: $term, take: 8 }) {
+          items {
+            productVariantId productVariantName
+            sku priceWithTax { ... on SinglePrice { value } ... on PriceRange { min max } }
+            productName
+          }
+        }
+      }
+    `, { term });
+
+    const items = data.search.items;
+    if (!items.length) return;
+
+    // Build dropdown
+    const rect = input.getBoundingClientRect();
+    closeDropdown();
+    productDropdown = document.createElement('div');
+    productDropdown.className = 'product-dropdown';
+    productDropdown.style.top  = (rect.bottom + window.scrollY + 2) + 'px';
+    productDropdown.style.left = rect.left + 'px';
+
+    items.forEach(item => {
+      const price = item.priceWithTax?.value ?? item.priceWithTax?.min ?? 0;
+      const div = document.createElement('div');
+      div.className = 'product-option';
+      div.innerHTML = `
+        <div class="product-option-name">${item.productVariantName || item.productName}</div>
+        <div class="product-option-detail">SKU: ${item.sku} &nbsp;|&nbsp; ₹${(price/100).toFixed(2)}</div>
+      `;
+      div.onclick = () => selectProduct(input, rowN, item, price);
+      productDropdown.appendChild(div);
+    });
+
+    document.body.appendChild(productDropdown);
+    activeSearchRow = rowN;
+  } catch(e) {
+    // silent
+  }
+}
+
+function selectProduct(codeInput, rowN, item, price) {
+  const row    = codeInput.closest('tr');
+  const inputs = row.querySelectorAll('input');
+  const nameIn = inputs[1];
+  const qtyIn  = inputs[2];
+  const rateIn = inputs[3];
+
+  codeInput.value     = item.sku;
+  nameIn.value        = item.productVariantName || item.productName;
+  rateIn.value        = (price / 100).toFixed(2);
+  row.dataset.variantId = item.productVariantId;
+
+  closeDropdown();
+  qtyIn.focus();
+  qtyIn.value = 1;
+  calcRowTotal(row, rowN);
+}
+
+function closeDropdown() {
+  if (productDropdown) {
+    productDropdown.remove();
+    productDropdown = null;
+  }
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.product-dropdown') && !e.target.classList.contains('td-input')) {
+    closeDropdown();
+  }
+});
+
+// ══════════════════════════════════════════════
+//  QTY CHANGE → ADD TO CART
+// ══════════════════════════════════════════════
+async function onQtyChange(qtyInput) {
+  const row     = qtyInput.closest('tr');
+  const rowN    = row.dataset.n;
+  const variantId = row.dataset.variantId;
+  const lineId  = row.dataset.lineId;
+  const qty     = parseInt(qtyInput.value) || 0;
+  calcRowTotal(row, rowN);
+
+  if (!variantId || qty <= 0) return;
+
+  clearTimeout(qtyInput._timer);
+  qtyInput._timer = setTimeout(async () => {
+    try {
+      let data;
+      if (lineId) {
+        data = await gql(`
+          mutation Adjust($lineId: ID!, $qty: Int!) {
+            adjustOrderLine(orderLineId: $lineId, quantity: $qty) {
+              ... on Order { id totalWithTax subTotalWithTax shippingWithTax
+                lines { id quantity unitPriceWithTax linePriceWithTax productVariant { id name sku } }
+                discounts { description amountWithTax }
+              }
+              ... on ErrorResult { errorCode message }
+            }
+          }
+        `, { lineId, qty });
+
+        const result = data.adjustOrderLine;
+        if (result.errorCode) throw new Error(result.message);
+        updateSummary(result);
+        toast('✅ Cart updated', 'success');
+      } else {
+        data = await gql(`
+          mutation AddItem($variantId: ID!, $qty: Int!) {
+            addItemToOrder(productVariantId: $variantId, quantity: $qty) {
+              ... on Order { id totalWithTax subTotalWithTax shippingWithTax
+                lines { id quantity unitPriceWithTax linePriceWithTax productVariant { id name sku } }
+                discounts { description amountWithTax }
+              }
+              ... on ErrorResult { errorCode message }
+            }
+          }
+        `, { variantId, qty });
+
+        const result = data.addItemToOrder;
+        if (result.errorCode) throw new Error(result.message);
+
+        // Assign lineId to row
+        if (result.lines) {
+          const line = result.lines.find(l => l.productVariant.id === variantId);
+          if (line) row.dataset.lineId = line.id;
+        }
+
+        currentOrderId = result.id;
+        document.getElementById('orderId').value = result.id;
+        updateSummary(result);
+        toast('✅ Item added to cart', 'success');
+      }
+    } catch(e) {
+      toast(`❌ ${e.message}`, 'error');
+    }
+  }, 700);
+}
+
+function calcRowTotal(row, rowN) {
+  const inputs = row.querySelectorAll('input');
+  const qty    = parseFloat(inputs[2].value) || 0;
+  const rate   = parseFloat(inputs[3].value) || 0;
+  const amt    = (qty * rate).toFixed(2);
+  document.getElementById(`rowAmt${rowN}`).textContent = amt;
+  document.getElementById(`rowTotal${rowN}`).textContent = amt;
+}
+
+// ══════════════════════════════════════════════
+//  REMOVE ROW
+// ══════════════════════════════════════════════
+async function removeRow(btn) {
+  const row    = btn.closest('tr');
+  const lineId = row.dataset.lineId;
+
+  if (lineId) {
+    try {
+      await gql(`
+        mutation Remove($lineId: ID!) {
+          removeOrderLine(orderLineId: $lineId) {
+            ... on Order { id totalWithTax subTotalWithTax shippingWithTax
+              discounts { description amountWithTax }
+            }
+            ... on ErrorResult { errorCode message }
+          }
+        }
+      `, { lineId });
+      toast('✅ Item removed', 'success');
+      await loadActiveOrder();
+      return;
+    } catch(e) {
+      toast(`❌ ${e.message}`, 'error');
+    }
+  }
+  row.remove();
+}
+
+// ══════════════════════════════════════════════
+//  UPDATE SUMMARY
+// ══════════════════════════════════════════════
+function updateSummary(order) {
+  const total    = (order.totalWithTax || 0) / 100;
+  const sub      = (order.subTotalWithTax || 0) / 100;
+  const shipping = (order.shippingWithTax || 0) / 100;
+  const tax      = (sub * 0.18).toFixed(2); // estimate GST 18%
+  const discount = order.discounts?.reduce((s, d) => s + Math.abs(d.amountWithTax), 0) / 100 || 0;
+  const lines    = order.lines?.length || 0;
+
+  set('sumItems', lines);
+  set('sumSubtotal', fmt(sub));
+  set('sumTax', fmt(tax));
+  set('sumDiscount', fmt(discount));
+  set('sumShipping', fmt(shipping));
+  set('sumGrandTotal', fmt(total));
+  set('displayTotal', fmt(total));
+  calcBalance();
+}
+
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function fmt(n) { return parseFloat(n).toFixed(2); }
+
+function calcBalance() {
+  const total    = parseFloat(document.getElementById('sumGrandTotal').textContent) || 0;
+  const received = parseFloat(document.getElementById('receivedAmt').value) || 0;
+  const balance  = (received - total).toFixed(2);
+  set('sumReceived', fmt(received));
+  set('sumBalance', balance);
+  set('displayBalance', balance);
+}
+
+// ══════════════════════════════════════════════
+//  COUPON
+// ══════════════════════════════════════════════
+async function applyCoupon() {
+  const code = document.getElementById('couponCode').value.trim().toUpperCase();
+  if (!code) { toast('Enter a coupon code first', 'info'); return; }
+
+  try {
+    const data = await gql(`
+      mutation Apply($code: String!) {
+        applyCouponCode(couponCode: $code) {
+          ... on Order { id totalWithTax subTotalWithTax shippingWithTax
+            discounts { description amountWithTax }
+            couponCodes
+          }
+          ... on CouponCodeInvalidError { errorCode message couponCode }
+          ... on CouponCodeExpiredError { errorCode message }
+          ... on CouponCodeLimitError { errorCode message }
+          ... on ErrorResult { errorCode message }
+        }
+      }
+    `, { code });
+
+    const result = data.applyCouponCode;
+    if (result.errorCode) throw new Error(result.message);
+    addedCoupon = code;
+    updateSummary(result);
+    toast(`🎟 Coupon "${code}" applied!`, 'success');
+  } catch(e) {
+    toast(`❌ Coupon error: ${e.message}`, 'error');
+  }
+}
+
+async function removeCoupon() {
+  if (!addedCoupon) { toast('No coupon applied', 'info'); return; }
+  try {
+    const data = await gql(`
+      mutation Remove($code: String!) {
+        removeCouponCode(couponCode: $code) {
+          id totalWithTax subTotalWithTax shippingWithTax
+          discounts { description amountWithTax }
+        }
+      }
+    `, { code: addedCoupon });
+    updateSummary(data.removeCouponCode);
+    addedCoupon = null;
+    document.getElementById('couponCode').value = '';
+    toast('✅ Coupon removed', 'success');
+  } catch(e) {
+    toast(`❌ ${e.message}`, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  SAVE / CHECKOUT / VIEW / CANCEL
+// ══════════════════════════════════════════════
+async function saveOrder() {
+  toast('💾 Order saved (already live in Vendure cart)', 'success');
+  await loadActiveOrder();
+}
+
+async function checkout() {
+  try {
+    // Step 1: Transition to ArrangingPayment
+    const t = await gql(`
+      mutation {
+        transitionOrderToState(state: "ArrangingPayment") {
+          ... on Order { id state }
+          ... on OrderStateTransitionError { errorCode transitionError }
+        }
+      }
+    `);
+    const state = t.transitionOrderToState;
+    if (state.errorCode) throw new Error(state.transitionError || state.errorCode);
+
+    // Step 2: Add dummy payment
+    const mode = document.getElementById('payMode').value;
+    const p = await gql(`
+      mutation {
+        addPaymentToOrder(input: {
+          method: "dummy-payment-handler"
+          metadata: { shouldDecline: false, shouldError: false }
+        }) {
+          ... on Order { id state code totalWithTax payments { id state method amount } }
+          ... on ErrorResult { errorCode message }
+        }
+      }
+    `);
+
+    const payment = p.addPaymentToOrder;
+    if (payment.errorCode) throw new Error(payment.message);
+
+    set('orderState', payment.state);
+    toast(`🎉 Order ${payment.code} placed! State: ${payment.state}`, 'success');
+  } catch(e) {
+    toast(`❌ Checkout failed: ${e.message}`, 'error');
+  }
+}
+
+async function viewOrder() {
+  if (!currentOrderId) { toast('No active order', 'info'); return; }
+  try {
+    const data = await gql(`
+      query GetOrder($id: ID!) {
+        order(id: $id) {
+          id code state totalWithTax
+          customer { firstName lastName emailAddress }
+          lines { quantity productVariant { name sku } }
+        }
+      }
+    `, { id: currentOrderId }, true);
+    const o = data.order;
+    if (o) toast(`📋 Order ${o.code} | State: ${o.state} | Total: ₹${(o.totalWithTax/100).toFixed(2)}`, 'info');
+  } catch(e) {
+    toast(`❌ ${e.message}`, 'error');
+  }
+}
+
+async function cancelOrder() {
+  if (!confirm('Delete all items in the current cart?')) return;
+  try {
+    // Remove all lines
+    const rows = document.querySelectorAll('#itemsBody tr[data-line-id]');
+    for (const row of rows) {
+      const lineId = row.dataset.lineId;
+      if (lineId) {
+        await gql(`
+          mutation Remove($lineId: ID!) {
+            removeOrderLine(orderLineId: $lineId) {
+              ... on Order { id }
+              ... on ErrorResult { errorCode message }
+            }
+          }
+        `, { lineId });
+      }
+    }
+    newBill();
+    toast('🗑 Order cancelled', 'info');
+  } catch(e) {
+    toast(`❌ ${e.message}`, 'error');
+  }
+}
+
+async function newBill() {
+  document.getElementById('itemsBody').innerHTML = '';
+  rowCounter = 0;
+  currentOrderId = null;
+  addedCoupon    = null;
+  document.getElementById('orderId').value      = '';
+  document.getElementById('orderState').value   = '';
+  document.getElementById('billNo').value       = '';
+  document.getElementById('couponCode').value   = '';
+  document.getElementById('receivedAmt').value  = '';
+  ['sumItems','sumSubtotal','sumTax','sumDiscount','sumShipping','sumReturn','sumGrandTotal','sumReceived','sumBalance','displayTotal','displayBalance']
+    .forEach(id => set(id, id.includes('Items') ? '0' : '0.00'));
+  addRow();
+}
+
+// ══════════════════════════════════════════════
+//  SEARCH CUSTOMER (Admin API)
+// ══════════════════════════════════════════════
+async function searchCustomer(term) {
+  if (!term || term.length < 3) return;
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(async () => {
+    try {
+      const data = await gql(`
+        query Search($term: String!) {
+          customers(options: { filter: { emailAddress: { contains: $term } } }) {
+            items { id firstName lastName emailAddress }
+          }
+        }
+      `, { term }, true);
+      const c = data.customers.items?.[0];
+      if (c) toast(`👤 Found: ${c.firstName} ${c.lastName} (${c.emailAddress})`, 'info');
+    } catch(e) { /* silent */ }
+  }, 500);
+}
+
+// ══════════════════════════════════════════════
+//  PRINT
+// ══════════════════════════════════════════════
+function printBill() {
+  window.print();
+}
+
+// ══════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'F1') { e.preventDefault(); saveOrder(); }
+  if (e.key === 'F2') { e.preventDefault(); newBill(); }
+  if (e.key === 'F3') { e.preventDefault(); document.getElementById('couponCode').focus(); }
+  if (e.key === 'F4') { e.preventDefault(); checkout(); }
+  if (e.key === 'F5') { e.preventDefault(); loadActiveOrder(); }
+  if (e.key === 'F9') { e.preventDefault(); printBill(); }
+});
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+(function init() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('billDate').value = today;
+  addRow();
+})();
+</script>
+</body>
+</html>
