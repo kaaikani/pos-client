@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LookupBarcodeQuery } from '../../core/queries/PosQueries';
 import { CreateLedgerCommand } from '../../core/queries/ledger.query';
-import { ListItemsQuery, CreateSaleCommand, ListSalesQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery, CreateSaleCommand, ListSalesQuery, DeleteSaleCommand, PosTaxMastersQuery } from '../../core/queries/pharma.query';
 import { invalidateCache } from '../../core/queries/cache';
 import { gql } from '../../core/queries/gql';
-
-const GST_RATE = 0.18;
+import InvoicePreviewModal from '../../components/invoice/InvoicePreviewModal';
+import { computeCartTotals } from '../../core/pos/cart-tax';
 
 // Common unit presets — covers weight (fruits/vegetables), count (biscuits/choc), volume (milk)
 const COMMON_UNITS = [
@@ -55,6 +55,11 @@ export default function PosModule() {
     const [bundleNo, setBundleNo] = useState('');
     const [igst, setIgst] = useState(false);
     const [nonAcc, setNonAcc] = useState(false);
+    // GST compliance inputs (sent to backend on save; printed on the tax invoice).
+    const [customerGstin, setCustomerGstin] = useState('');
+    const [placeOfSupply, setPlaceOfSupply] = useState('');
+    const [reverseCharge, setReverseCharge] = useState(false);
+    const [taxMasters, setTaxMasters] = useState([]);
     const [header, setHeader] = useState(false);
     const [taxType, setTaxType] = useState('WTax');
     const [rateType, setRateType] = useState('ARate');
@@ -89,6 +94,8 @@ export default function PosModule() {
     const [payCredit, setPayCredit] = useState('');
 
     const [lastOrder, setLastOrder] = useState(null);
+    const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+    const [invoiceTarget, setInvoiceTarget] = useState({ saleId: null, billNo: '' });
     const [showToast, setShowToast] = useState(false);
 
     // Parked/Hold bills
@@ -98,6 +105,15 @@ export default function PosModule() {
 
     // Keyboard navigation
     const [focusedRow, setFocusedRow] = useState(-1); // cart row index under arrow focus
+
+    // Last Bills viewer (recent finalized bills from localStorage)
+    const [showLastBills, setShowLastBills] = useState(false);
+    const [lastBills, setLastBills] = useState([]);
+    const [lastBillsFilter, setLastBillsFilter] = useState('');
+    const lastBillsSearchRef = useRef(null);
+
+    // Per-customer last sale rate: Map<itemCode, { rate, billNo, billDate }>
+    const [customerLastRates, setCustomerLastRates] = useState({});
 
     // New: sales tabs, bill-size, counter & rate-type label, customer autocomplete
     const [activeSalesTab, setActiveSalesTab] = useState('Sales1');
@@ -113,15 +129,44 @@ export default function PosModule() {
     const itemNameInputsRef = useRef({});
 
     useEffect(() => {
-        setBillNo(String(Math.floor(Math.random() * 900 + 100)));
         setDate(new Date().toLocaleDateString('en-GB'));
-        const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
-        setLastBillNo(String(reports.length || 3));
         // Force fresh fetch on POS open so newly-added items / size variants are picked up
         invalidateCache('pharma:items');
         new ListItemsQuery().execute().then(setPharmaItems).catch(e => console.error(e));
+        new PosTaxMastersQuery().execute().then(setTaxMasters).catch(() => {});
         // Load parked bills
         try { setParkedBills(JSON.parse(localStorage.getItem('pos_parked_bills') || '[]')); } catch {}
+
+        // Sync Bill No: new bill = max existing + 1.
+        // Deleted bill numbers are NOT reused — existing bills keep their original numbers,
+        // so a deletion never affects other bills' identity.
+        // e.g. 1,2,3,4,5,6,7,8,9,10 exist → delete 5 → remaining 1,2,3,4,6,7,8,9,10 → next = 11.
+        (async () => {
+            let maxBillNo = 0;
+            try {
+                const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
+                for (const r of reports) {
+                    const n = parseInt(r.billNo, 10);
+                    if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
+                }
+            } catch {}
+            try {
+                const dbSales = await new ListSalesQuery().execute();
+                for (const s of (dbSales || [])) {
+                    const n = parseInt(s.billNo, 10);
+                    if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
+                }
+            } catch {}
+            // Also remember the highest-ever bill number seen, so that deleting the latest
+            // bill does NOT cause the counter to roll back.
+            try {
+                const seen = parseInt(localStorage.getItem('pos_max_billno_ever') || '0', 10);
+                if (!isNaN(seen) && seen > maxBillNo) maxBillNo = seen;
+            } catch {}
+            setLastBillNo(String(maxBillNo));
+            setBillNo(String(maxBillNo + 1));
+        })();
+
         // Auto-focus the first ItemName input on load
         setTimeout(() => { itemNameInputsRef.current[0]?.focus(); }, 200);
     }, []);
@@ -133,22 +178,42 @@ export default function PosModule() {
 
     const totalItems = rows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
     const subTotal = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const taxAmount = taxType === 'WTax' ? Math.round(subTotal * GST_RATE * 100) / 100 : 0;
     const discAmt = parseFloat(discount) || 0;
     const transportAmt = parseFloat(transportCharges) || 0;
-    const grandTotal = Math.round((subTotal + taxAmount + transportAmt - discAmt) * 100) / 100;
+
+    // Live GST — mirrors the backend per-item tax (gstPercent + priceIncludesTax +
+    // optional PosTaxMaster), NOT a flat 18%. Keeps the preview and the saved bill
+    // identical and within the server's ±₹1 grand-total tolerance.
+    const itemsByCode = React.useMemo(() => {
+        const m = new Map();
+        for (const it of pharmaItems) m.set(String(it.code), it);
+        return m;
+    }, [pharmaItems]);
+    const taxMastersById = React.useMemo(() => {
+        const m = new Map();
+        for (const t of taxMasters) m.set(Number(t.id), t);
+        return m;
+    }, [taxMasters]);
+    const cartTax = React.useMemo(
+        () => computeCartTotals(rows, itemsByCode, taxMastersById, { otherState: nonAcc, discount: discAmt, transport: transportAmt }),
+        [rows, itemsByCode, taxMastersById, nonAcc, discAmt, transportAmt],
+    );
+    const taxAmount = taxType === 'WTax' ? cartTax.taxAmount : 0;
+    const grandTotal = taxType === 'WTax'
+        ? cartTax.grandTotal
+        : Math.round((subTotal + transportAmt - discAmt) * 100) / 100;
     const receivedA = parseFloat(receivedAmt) || 0;
     const balance = Math.round((grandTotal - receivedA) * 100) / 100;
 
     const addRow = () => setRows(prev => [...prev, { sno: prev.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' }]);
 
     const updateRow = (idx, field, val) => {
-        // Stock guard: when user types qty manually, block exceeding available stock
+        // Stock guard: only enforced when item has isStockBased = true
         if (field === 'qty') {
             const r = rows[idx];
             if (r && r.itemName) {
                 const prod = pharmaItems.find(p => p.code === r.code || p.itemName === r.itemName);
-                if (prod) {
+                if (prod && prod.isStockBased === true) {
                     const stock = prod.minStkQty != null && prod.minStkQty !== '' ? parseFloat(prod.minStkQty)
                                 : prod.minStock != null && prod.minStock !== '' ? parseFloat(prod.minStock)
                                 : null;
@@ -229,18 +294,19 @@ export default function PosModule() {
         if (!item) return;
         setSelectedProduct(item);
 
-        // Stock validation — block if item is out of stock
-        const stock = getItemStock(item);
-        if (stock != null && stock <= 0) {
-            alert(`❌ OUT OF STOCK\n\n"${item.itemName}" (Code: ${item.code}) is out of stock and cannot be added to the bill.\n\nPlease restock the item from Item Master / Purchase first.`);
-            return;
-        }
-        // If adding this would exceed available stock, block too
-        if (stock != null) {
-            const alreadyInCart = cartQtyForItem(item);
-            if (alreadyInCart + 1 > stock) {
-                alert(`❌ INSUFFICIENT STOCK\n\n"${item.itemName}" — only ${stock} available, but you've already added ${alreadyInCart} to the cart.`);
+        // Stock validation — ONLY enforced when item has isStockBased = true
+        if (item.isStockBased === true) {
+            const stock = getItemStock(item);
+            if (stock != null && stock <= 0) {
+                alert(`❌ OUT OF STOCK\n\n"${item.itemName}" (Code: ${item.code}) is out of stock and cannot be added to the bill.\n\nPlease restock the item from Item Master / Purchase first.`);
                 return;
+            }
+            if (stock != null) {
+                const alreadyInCart = cartQtyForItem(item);
+                if (alreadyInCart + 1 > stock) {
+                    alert(`❌ INSUFFICIENT STOCK\n\n"${item.itemName}" — only ${stock} available, but you've already added ${alreadyInCart} to the cart.`);
+                    return;
+                }
             }
         }
 
@@ -254,7 +320,7 @@ export default function PosModule() {
     const finalizePickItem = (item, variant) => {
         if (!item) return;
         let idx = searchRowIdx;
-        let nextFocusIdx = 0;
+        let focusTarget = null; // { row, cell }
         const overrideUnit = variant?.size;
         const overrideRate = variant ? parseFloat(variant.rate) : null;
         setRows(prev => {
@@ -262,6 +328,7 @@ export default function PosModule() {
             // DUPLICATE DETECTION: same product + same variant (unit) → bump qty
             const dupUnit = overrideUnit || item.unit || defaultUnitFor(item);
             const existingIdx = nr.findIndex(r => r.itemName && r.code === item.code && r.itemName === item.itemName && (r.unit || '') === dupUnit);
+            let filledRowIdx = idx;
             if (existingIdx >= 0 && existingIdx !== idx) {
                 // Bump existing row's qty
                 const er = { ...nr[existingIdx] };
@@ -271,6 +338,7 @@ export default function PosModule() {
                 er.amount = (newQty * rate).toFixed(2);
                 er.total = er.amount;
                 nr[existingIdx] = er;
+                filledRowIdx = existingIdx;
             } else {
                 // New product → fill the row at idx (or append if idx out of range)
                 while (nr.length <= idx) nr.push({ sno: nr.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' });
@@ -286,12 +354,17 @@ export default function PosModule() {
             nr = nr.filter(r => r.itemName);
             // Ensure exactly ONE trailing blank row for continuous entry
             nr.push({ sno: nr.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' });
-            // Focus the trailing empty row
-            nextFocusIdx = nr.length - 1;
+            // After pick: focus the Qty cell of the row we just filled, so user can adjust qty → Enter → Rate → Enter → next row.
+            focusTarget = { row: filledRowIdx, cell: 'qty' };
             return nr.map((r, i) => ({ ...r, sno: i + 1 }));
         });
-        // Move focus to trailing empty row's ItemName for continuous entry
-        setTimeout(() => { itemNameInputsRef.current[nextFocusIdx]?.focus(); }, 50);
+        setTimeout(() => {
+            if (focusTarget) {
+                const el = document.querySelector(`input[data-row="${focusTarget.row}"][data-cell="${focusTarget.cell}"]`);
+                el?.focus();
+                el?.select?.();
+            }
+        }, 50);
     };
 
     // When clicking a row in the cart, show that product's stock
@@ -408,11 +481,17 @@ export default function PosModule() {
             billTime: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
             saleType: primaryMode, bookNo: book, billRef,
             customerName: customerName || 'Walk-in', customerPhone, customerAddress, salesMan,
+            // GST compliance — backend stores these, derives invoiceType, and uses
+            // placeOfSupply/otherState to decide intra vs inter-state.
+            otherState: nonAcc,
+            customerGstin: customerGstin.trim().toUpperCase(),
+            placeOfSupply: placeOfSupply.trim(),
+            reverseCharge,
             items: validRows.map(r => ({ code: r.code, name: r.itemName, qty: parseFloat(r.qty), rate: parseFloat(r.rate), amount: parseFloat(r.amount) })),
             subtotal: subTotal, taxAmount, discount: discAmt, transportCharges: transportAmt, grandTotal,
             cashAmount: cashA, upiAmount: upiA, cardAmount: cardA,
             receivedAmount: totalReceived, balanceDue, changeReturned,
-            remarks,
+            remarks: header ? `[HOME DELIVERY] ${remarks || ''}`.trim() : remarks,
         };
         try {
             // Auto-save customer to Vendure for future lookup (find-or-create by phone)
@@ -431,6 +510,7 @@ export default function PosModule() {
                 grandTotal, receivedAmount: totalReceived, balance: balanceDue,
                 gstAmount: taxAmount, cashAmount: saleInput.cashAmount, upiAmount: saleInput.upiAmount, cardAmount: saleInput.cardAmount,
                 dbId: savedSale?.id,
+                homeDelivery: !!header,
             };
             saveToReport(legacyPayload);
 
@@ -452,9 +532,50 @@ export default function PosModule() {
 
             setLastOrder(legacyPayload);
             setShowToast(true); setTimeout(() => setShowToast(false), 5000);
+
+            // Ask if user wants to print this bill
+            const wantPrint = window.confirm(`✓ Bill ${billNo} saved!\n\nDo you want to print it?\n\n• OK = Print\n• Cancel = Continue to next bill`);
+
+            const justSavedBillNo = parseInt(billNo) || 0;
+
+            // Reset entire form to a clean state (Home Delivery, GST, etc.)
             handleCancel();
-            setBillNo(String(parseInt(billNo) + 1));
-            setLastBillNo(String((parseInt(lastBillNo) || 0) + 1));
+
+            // Next bill = max + 1. Deleting old bills doesn't roll back the counter,
+            // because we also persist the highest-ever number to localStorage.
+            try {
+                let maxBillNo = justSavedBillNo;
+                try {
+                    const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
+                    for (const r of reports) {
+                        const n = parseInt(r.billNo, 10);
+                        if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
+                    }
+                } catch {}
+                try {
+                    const dbSales = await new ListSalesQuery().execute();
+                    for (const s of (dbSales || [])) {
+                        const n = parseInt(s.billNo, 10);
+                        if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
+                    }
+                } catch {}
+                try {
+                    const seen = parseInt(localStorage.getItem('pos_max_billno_ever') || '0', 10);
+                    if (!isNaN(seen) && seen > maxBillNo) maxBillNo = seen;
+                } catch {}
+                // Remember this so future loads never roll back even after deletions
+                try { localStorage.setItem('pos_max_billno_ever', String(maxBillNo)); } catch {}
+                setLastBillNo(String(maxBillNo));
+                setBillNo(String(maxBillNo + 1));
+            } catch {
+                setLastBillNo(String(justSavedBillNo));
+                setBillNo(String(justSavedBillNo + 1));
+            }
+
+            if (wantPrint) {
+                // Slight delay so React can settle before opening print window
+                setTimeout(() => handlePrint(), 100);
+            }
         } catch (err) {
             console.error('Save failed:', err);
             alert('❌ Failed to save bill: ' + err.message);
@@ -470,124 +591,27 @@ export default function PosModule() {
         setShowCustSuggest(false); setShowNameSuggest(false);
         setPayCash(''); setPayUpi(''); setPayCard(''); setPayCredit('');
         setShowCheckout(false);
+        // Reset bill-level toggles so each new bill starts fresh
+        setHeader(false);          // Home Delivery
+        setIgst(false);            // GST No
+        setNonAcc(false);          // Other State
+        setCustomerGstin(''); setPlaceOfSupply(''); setReverseCharge(false);
+        setMode('CASH');           // Default payment mode
+        setCustomerLastRates({});  // Customer-specific last rates
+        setDate(new Date().toLocaleDateString('en-GB'));
         // Focus first ItemName input for next bill entry
         setTimeout(() => { itemNameInputsRef.current[0]?.focus(); }, 100);
     };
 
+    // Open the GST-compliant invoice preview (Preview → Open PDF → Save PDF → Print).
+    // The invoice is rendered ENTIRELY from the persisted backend sale + active
+    // PosCompany — see InvoicePreviewModal / invoice-data / invoice-pdf. The POS
+    // screen no longer builds the invoice HTML (which used a flat 18% + hardcoded
+    // seller); it only points the modal at the saved bill.
     const handlePrint = () => {
         if (!lastOrder) return alert('No bill to print. Save a bill first (F1).');
-        const size = BILL_SIZES[billSize] || BILL_SIZES['3inch'];
-        const winWidth = parseInt(size.width) * 4 || 420;
-        const w = window.open('', '_blank', `width=${winWidth},height=800`);
-        if (!w) return alert('Allow popups to print invoice.');
-        const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-        const totalQty = lastOrder.items.reduce((s, i) => s + (parseFloat(i.qty) || 0), 0);
-        const itemsHTML = lastOrder.items.map((it, i) => `<tr>
-<td style="padding:5px 4px;border-bottom:1px dotted #ccc;text-align:center;font-size:11px;color:#666">${i+1}</td>
-<td style="padding:5px 4px;border-bottom:1px dotted #ccc;font-weight:700;font-size:12px">${it.name}</td>
-<td style="padding:5px 4px;border-bottom:1px dotted #ccc;text-align:center;font-size:12px">${it.qty}</td>
-<td style="padding:5px 4px;border-bottom:1px dotted #ccc;text-align:right;font-size:12px">${parseFloat(it.price).toFixed(2)}</td>
-<td style="padding:5px 4px;border-bottom:1px dotted #ccc;text-align:right;font-weight:700;font-size:12px">${parseFloat(it.total).toFixed(2)}</td>
-</tr>`).join('');
-
-        const html = `<!DOCTYPE html><html><head><title>Invoice ${lastOrder.billNo}</title>
-<style>
-${size.css}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI','Arial',sans-serif;padding:10px;color:#1e293b;width:${size.width};max-width:${size.width};margin:0 auto;background:#fff;font-size:${size.width.includes('76') ? '10px' : size.width.includes('104') ? '11px' : '12px'}}
-@media print{body{padding:4px;width:100%;max-width:100%}}
-.center{text-align:center}
-.right{text-align:right}
-hr{border:none;border-top:2px dashed #94a3b8;margin:10px 0}
-table{width:100%;border-collapse:collapse}
-</style></head>
-<body onload="window.print()">
-
-<div class="center" style="border-bottom:2px dashed #94a3b8;padding-bottom:12px;margin-bottom:10px">
-  <h1 style="font-size:24px;font-weight:900;letter-spacing:3px">AVS ECOM</h1>
-  <p style="font-size:10px;color:#64748b;letter-spacing:3px;text-transform:uppercase;margin-top:2px">MEDICAL & PHARMACY</p>
-  <p style="font-size:11px;color:#475569;margin-top:6px">123, Main Road, Your City - 600001</p>
-  <p style="font-size:11px;color:#475569">Ph: +91 98765 43210 | GSTIN: 33XXXXX1234X1ZX</p>
-  <p style="font-size:11px;color:#475569">DL No: TN-CHN-20/1234/2026</p>
-</div>
-
-<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0">
-  <div>
-    <div style="color:#64748b;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Invoice</div>
-    <div style="font-weight:800;color:#0f172a;font-size:14px">${lastOrder.billNo}</div>
-  </div>
-  <div class="center">
-    <div style="color:#64748b;font-size:9px;font-weight:700;text-transform:uppercase">Date</div>
-    <div style="font-weight:700">${lastOrder.date}</div>
-  </div>
-  <div class="right">
-    <div style="color:#64748b;font-size:9px;font-weight:700;text-transform:uppercase">Time</div>
-    <div style="font-weight:700">${time}</div>
-  </div>
-</div>
-
-<div style="font-size:11px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0">
-  <div style="display:flex;justify-content:space-between;margin-bottom:2px">
-    <div><span style="color:#64748b">Customer:</span> <strong>${lastOrder.customer?.name || 'Walk-in'}</strong></div>
-    <div><span style="color:#64748b">Mode:</span> <strong style="color:${lastOrder.saleType==='CREDIT'?'#ea580c':'#059669'}">${lastOrder.saleType}</strong></div>
-  </div>
-  ${lastOrder.customer?.phone ? `<div style="margin-top:2px"><span style="color:#64748b">Phone:</span> ${lastOrder.customer.phone}</div>` : ''}
-  ${lastOrder.customer?.address ? `<div style="margin-top:2px"><span style="color:#64748b">Address:</span> ${lastOrder.customer.address}</div>` : ''}
-  ${lastOrder.salesMan ? `<div style="margin-top:2px"><span style="color:#64748b">Sales Man:</span> ${lastOrder.salesMan}</div>` : ''}
-</div>
-
-<table style="margin-bottom:10px">
-  <thead>
-    <tr style="background:#f1f5f9">
-      <th style="padding:7px 4px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#475569;border-bottom:2px solid #cbd5e1;width:25px">#</th>
-      <th style="padding:7px 4px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#475569;border-bottom:2px solid #cbd5e1">Item Description</th>
-      <th style="padding:7px 4px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#475569;border-bottom:2px solid #cbd5e1;width:35px">Qty</th>
-      <th style="padding:7px 4px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#475569;border-bottom:2px solid #cbd5e1;width:55px">Rate</th>
-      <th style="padding:7px 4px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#475569;border-bottom:2px solid #cbd5e1;width:65px">Amount</th>
-    </tr>
-  </thead>
-  <tbody>${itemsHTML}</tbody>
-</table>
-
-<div style="border-top:2px dashed #94a3b8;padding-top:10px;font-size:12px">
-  <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-    <span style="color:#64748b">Sub Total (${lastOrder.items.length} items, ${totalQty} qty)</span>
-    <strong>₹${lastOrder.subtotal.toFixed(2)}</strong>
-  </div>
-  ${lastOrder.discount > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:3px">
-    <span style="color:#64748b">Discount</span><strong style="color:#ef4444">-₹${lastOrder.discount.toFixed(2)}</strong>
-  </div>` : ''}
-  <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-    <span style="color:#64748b">GST / Tax</span><strong>₹${lastOrder.taxAmount.toFixed(2)}</strong>
-  </div>
-  ${lastOrder.transport > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:3px">
-    <span style="color:#64748b">Transport</span><strong>₹${lastOrder.transport.toFixed(2)}</strong>
-  </div>` : ''}
-  <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:2px solid #0f172a;font-size:18px;font-weight:900">
-    <span>GRAND TOTAL</span><span>₹${lastOrder.grandTotal.toFixed(2)}</span>
-  </div>
-  ${lastOrder.receivedAmount > 0 ? `
-  <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px">
-    <span style="color:#059669;font-weight:700">Paid</span>
-    <strong style="color:#059669">₹${lastOrder.receivedAmount.toFixed(2)}</strong>
-  </div>
-  <div style="display:flex;justify-content:space-between;font-size:12px">
-    <span style="color:${lastOrder.balance > 0 ? '#ef4444' : '#64748b'};font-weight:700">${lastOrder.balance > 0 ? 'Balance Due' : 'Change'}</span>
-    <strong style="color:${lastOrder.balance > 0 ? '#ef4444' : '#0f172a'}">₹${Math.abs(lastOrder.balance).toFixed(2)}</strong>
-  </div>` : ''}
-</div>
-
-<div class="center" style="margin-top:20px;padding-top:12px;border-top:2px dashed #94a3b8;font-size:11px;color:#94a3b8">
-  <p style="font-weight:700;color:#475569;margin-bottom:4px">🙏 Thank You! Visit Again 🙏</p>
-  <p style="margin-top:4px">Items: ${lastOrder.items.length} | Total Qty: ${totalQty}</p>
-  <p style="margin-top:6px;font-size:9px;letter-spacing:1px">Powered by AVS ECOM Medical POS</p>
-</div>
-
-</body></html>`;
-
-        w.document.open();
-        w.document.write(html);
-        w.document.close();
+        setInvoiceTarget({ saleId: lastOrder.dbId || null, billNo: lastOrder.billNo });
+        setInvoiceModalOpen(true);
     };
 
     const handlePdf = () => handlePrint();
@@ -643,6 +667,7 @@ table{width:100%;border-collapse:collapse}
             if (e.key === 'F9') { e.preventDefault(); if (!showCheckout) openCheckout(); return; }
             if (e.key === 'F10') { e.preventDefault(); openCheckout(); return; }
             if (e.key === 'F11') { e.preventDefault(); document.getElementById('phone-input')?.focus(); return; }
+            if (e.key === 'F12') { e.preventDefault(); openLastBills(); return; }
 
             // Alt-key shortcuts for fast Customer / Mobile field jumps
             if (e.altKey && (e.key === 'c' || e.key === 'C')) {
@@ -669,6 +694,12 @@ table{width:100%;border-collapse:collapse}
                 if (e.key === 'Enter' && (e.target.tagName !== 'INPUT' || e.target.type === 'number')) {
                     e.preventDefault(); confirmCheckout(); return;
                 }
+                return;
+            }
+
+            // ── Last Bills modal: Esc to close ──
+            if (showLastBills) {
+                if (e.key === 'Escape') { e.preventDefault(); setShowLastBills(false); return; }
                 return;
             }
 
@@ -796,6 +827,19 @@ table{width:100%;border-collapse:collapse}
                 }
             }
 
+            // ── Global ESC: if there's an in-progress bill (any field filled), confirm cancel ──
+            if (e.key === 'Escape') {
+                const hasItems = rows.some(r => r.itemName);
+                const hasCustomer = customerName.trim() || customerPhone.trim() || customerAddress.trim();
+                if (hasItems || hasCustomer) {
+                    e.preventDefault();
+                    if (window.confirm('Do you want to cancel this bill?\n\n• OK = clear and start fresh\n• Cancel = keep working on it')) {
+                        handleCancel();
+                    }
+                    return;
+                }
+            }
+
             // Arrow keys only navigate cart when NOT inside an input (except when at end of input or using Ctrl)
             if (!inInput || e.ctrlKey) {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedRow(p => Math.min(p+1, rows.length-1)); return; }
@@ -815,7 +859,7 @@ table{width:100%;border-collapse:collapse}
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showSearch, searchSelIdx, filteredSearchItems, rows, showParkedModal, parkedSelIdx, parkedBills, focusedRow, suggestRow, suggestField, suggestSelIdx, activeSuggestions, showCustSuggest, customerSuggestions, custSuggestSelIdx, showNameSuggest, nameSuggestions, nameSuggestSelIdx, unitDropdownRow, unitDropdownSelIdx, pharmaItems, showCheckout, payCash, payUpi, payCard, payCredit, mode, grandTotal]);
+    }, [showSearch, searchSelIdx, filteredSearchItems, rows, showParkedModal, parkedSelIdx, parkedBills, focusedRow, suggestRow, suggestField, suggestSelIdx, activeSuggestions, showCustSuggest, customerSuggestions, custSuggestSelIdx, showNameSuggest, nameSuggestions, nameSuggestSelIdx, unitDropdownRow, unitDropdownSelIdx, pharmaItems, showCheckout, payCash, payUpi, payCard, payCredit, mode, grandTotal, showLastBills, customerName, customerPhone, customerAddress]);
 
     const removeRow = (idx) => {
         setRows(prev => {
@@ -857,30 +901,44 @@ table{width:100%;border-collapse:collapse}
         return () => { cancelled = true; clearTimeout(t); };
     }, [customerPhone]);
 
-    // Customer lookup by name (2+ chars) — match against firstName OR lastName
+    // Customer lookup by name — empty (show recent 10) OR 1+ chars (filter)
     useEffect(() => {
         const name = customerName.trim();
-        if (name.length < 2 || name.toUpperCase() === 'COUNTER SALES') {
+        if (name.toUpperCase() === 'COUNTER SALES') {
             setNameSuggestions([]); setShowNameSuggest(false); return;
         }
         let cancelled = false;
         const t = setTimeout(async () => {
             try {
-                const query = `query FindCustByName($term: String!) {
-                    customers(options: {
-                        filter: { firstName: { contains: $term }, lastName: { contains: $term } },
-                        filterOperator: OR,
-                        take: 8
-                    }) {
-                        items { id firstName lastName phoneNumber emailAddress addresses { streetLine1 city postalCode } }
-                    }
-                }`;
-                const data = await gql(query, { useAdmin: true, variables: { term: name } });
+                let query, vars;
+                if (name.length === 0) {
+                    // Show most recent customers (no filter)
+                    query = `query AllCustomers {
+                        customers(options: { take: 10, sort: { createdAt: DESC } }) {
+                            items { id firstName lastName phoneNumber emailAddress addresses { streetLine1 city postalCode } }
+                        }
+                    }`;
+                    vars = {};
+                } else {
+                    query = `query FindCustByName($term: String!) {
+                        customers(options: {
+                            filter: { firstName: { contains: $term }, lastName: { contains: $term } },
+                            filterOperator: OR,
+                            take: 10
+                        }) {
+                            items { id firstName lastName phoneNumber emailAddress addresses { streetLine1 city postalCode } }
+                        }
+                    }`;
+                    vars = { term: name };
+                }
+                const data = await gql(query, { useAdmin: true, variables: vars });
                 if (cancelled) return;
                 const items = data?.customers?.items || [];
                 setNameSuggestions(items);
                 setNameSuggestSelIdx(0);
-                setShowNameSuggest(items.length > 0);
+                // Only show dropdown automatically when user is typing (1+ char).
+                // For empty field, we'll trigger show via onFocus instead.
+                if (name.length > 0) setShowNameSuggest(items.length > 0);
             } catch (err) { console.warn('Customer name lookup failed:', err.message); }
         }, 250);
         return () => { cancelled = true; clearTimeout(t); };
@@ -894,6 +952,187 @@ table{width:100%;border-collapse:collapse}
         setPickedCustomerId(c.id || null);
         setShowCustSuggest(false);
         setShowNameSuggest(false);
+    };
+
+    // Load this customer's previous purchase rates (per item) from recent bills.
+    // Keyed by item code → { rate, billNo, billDate } showing the most recent rate paid.
+    useEffect(() => {
+        const phone = (customerPhone || '').trim();
+        if (!phone || phone.replace(/\D/g, '').length < 4) {
+            setCustomerLastRates({});
+            return;
+        }
+        let cancelled = false;
+        const t = setTimeout(async () => {
+            try {
+                const list = await new ListSalesQuery().execute();
+                if (cancelled) return;
+                const mine = (list || [])
+                    .filter(s => (s.customerPhone || '').trim() === phone)
+                    .sort((a, b) => (b.billDate + b.billTime).localeCompare(a.billDate + a.billTime));
+                const rates = {};
+                for (const sale of mine) {
+                    let items = [];
+                    try { items = JSON.parse(sale.itemsJson || '[]'); } catch {}
+                    for (const it of items) {
+                        const code = String(it.code || it.itemCode || '');
+                        if (!code || rates[code]) continue; // keep first (most recent)
+                        const rate = parseFloat(it.rate);
+                        if (!isNaN(rate) && rate > 0) {
+                            rates[code] = { rate, billNo: sale.billNo, billDate: sale.billDate };
+                        }
+                    }
+                }
+                setCustomerLastRates(rates);
+            } catch (err) { console.warn('Last rates lookup failed:', err.message); }
+        }, 400);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [customerPhone]);
+
+    // Load Last Bills modal data: combine pos_reports (legacy) + DB sales for completeness
+    const openLastBills = async () => {
+        try {
+            const dbSales = await new ListSalesQuery().execute().catch(() => []);
+            const local = JSON.parse(localStorage.getItem('pos_reports') || '[]');
+            // Merge by billNo: prefer DB record over local
+            const map = new Map();
+            for (const l of local) {
+                if (l.billNo) map.set(String(l.billNo), {
+                    source: 'local',
+                    billNo: l.billNo,
+                    billDate: l.date || '',
+                    billTime: '',
+                    customerName: l.customer?.name || '-',
+                    customerPhone: l.customer?.phone || '',
+                    saleType: l.saleType || l.mode || '',
+                    grandTotal: l.grandTotal || 0,
+                    payload: l,
+                });
+            }
+            for (const s of (dbSales || [])) {
+                map.set(String(s.billNo), {
+                    source: 'db',
+                    billNo: s.billNo,
+                    billDate: s.billDate,
+                    billTime: s.billTime,
+                    customerName: s.customerName,
+                    customerPhone: s.customerPhone,
+                    saleType: s.saleType,
+                    grandTotal: s.grandTotal,
+                    raw: s,
+                });
+            }
+            const arr = [...map.values()].sort((a, b) =>
+                (b.billDate + ' ' + (b.billTime || '')).localeCompare(a.billDate + ' ' + (a.billTime || ''))
+            );
+            setLastBills(arr.slice(0, 200));
+            setLastBillsFilter('');
+            setShowLastBills(true);
+            setTimeout(() => lastBillsSearchRef.current?.focus(), 50);
+        } catch (err) {
+            alert('Failed to load bills: ' + err.message);
+        }
+    };
+
+    // Load a bill into the sales screen for editing (does NOT print).
+    const loadBillForEdit = (b) => {
+        if (rows.some(r => r.itemName)) {
+            if (!confirm('Current cart has items. Hold current bill and load selected bill for edit?')) return;
+            handleHold();
+        }
+        const r = b.raw;
+        const l = b.payload;
+        let items = [];
+        if (r) {
+            try { items = JSON.parse(r.itemsJson || '[]'); } catch {}
+        } else if (l) {
+            items = l.items || [];
+        }
+        // Build cart rows from items
+        const newRows = items.map((it, i) => {
+            const qty = parseFloat(it.qty) || 0;
+            const rate = parseFloat(it.rate || it.price) || 0;
+            return {
+                sno: i + 1,
+                code: String(it.code || it.id || it.barcode || ''),
+                itemName: it.name || it.itemName || '',
+                unit: it.unit || '1 Pc',
+                qty: String(qty),
+                rate: String(rate),
+                amount: (qty * rate).toFixed(2),
+                total: (qty * rate).toFixed(2),
+            };
+        });
+        // Trailing empty row for continuous entry
+        newRows.push({ sno: newRows.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' });
+        setRows(newRows);
+        setBillNo(String(r?.billNo || l?.billNo || ''));
+        setCustomerName(r?.customerName || l?.customer?.name || '');
+        setCustomerPhone(r?.customerPhone || l?.customer?.phone || '');
+        setCustomerAddress(r?.customerAddress || l?.customer?.address || '');
+        setSalesMan(r?.salesMan || l?.salesMan || '');
+        setMode((r?.saleType || l?.saleType || 'CASH').toUpperCase());
+        setDiscount(String(r?.discount ?? l?.discount ?? 0));
+        setTransportCharges(String(r?.transportCharges ?? l?.transport ?? 0));
+        const remarksText = r?.remarks || '';
+        setHeader(remarksText.includes('[HOME DELIVERY]'));
+        setRemarks(remarksText.replace(/^\[HOME DELIVERY\]\s*/, ''));
+        setShowLastBills(false);
+        setTimeout(() => { itemNameInputsRef.current[0]?.focus(); }, 100);
+    };
+
+    // Permanently delete a bill from DB + local history. Does not affect other bills.
+    const deleteBill = async (b) => {
+        const ok = window.confirm(
+            `Delete bill ${b.billNo}?\n\n` +
+            `Customer: ${b.customerName || 'Walk-in'}\n` +
+            `Total: ₹${(b.grandTotal || 0).toFixed(2)}\n\n` +
+            `This cannot be undone. Other bill numbers will NOT change.\n` +
+            `OK = Delete · Cancel = Keep`
+        );
+        if (!ok) return;
+        try {
+            // Delete from DB if we have its DB id
+            const dbId = b.raw?.id || b.payload?.dbId;
+            if (dbId) {
+                try { await new DeleteSaleCommand().execute(dbId); }
+                catch (e) { console.warn('DB delete failed:', e.message); }
+            }
+            // Always remove from local pos_reports as well
+            try {
+                const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
+                const filtered = reports.filter(r => String(r.billNo) !== String(b.billNo));
+                localStorage.setItem('pos_reports', JSON.stringify(filtered));
+            } catch {}
+            // Refresh the modal list
+            await openLastBills();
+        } catch (err) {
+            alert('Failed to delete bill: ' + err.message);
+        }
+    };
+
+    const reprintBill = (b) => {
+        // Use legacy payload if available, else build minimal one from DB row
+        let payload = b.payload;
+        if (!payload && b.raw) {
+            const r = b.raw;
+            let items = [];
+            try { items = JSON.parse(r.itemsJson || '[]'); } catch {}
+            payload = {
+                billNo: r.billNo, date: r.billDate,
+                customer: { name: r.customerName, phone: r.customerPhone, address: r.customerAddress },
+                salesMan: r.salesMan, saleType: r.saleType,
+                items: items.map(it => ({ name: it.name || it.itemName, qty: it.qty, price: it.rate, total: (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0) })),
+                subtotal: r.subtotal, taxAmount: r.taxAmount, discount: r.discount, transport: r.transportCharges,
+                grandTotal: r.grandTotal, receivedAmount: r.receivedAmount, balance: r.balanceDue,
+                cashAmount: r.cashAmount, upiAmount: r.upiAmount, cardAmount: r.cardAmount,
+                homeDelivery: (r.remarks || '').includes('[HOME DELIVERY]'),
+            };
+        }
+        if (!payload) return alert('Could not reconstruct bill for reprint.');
+        setLastOrder(payload);
+        setShowLastBills(false);
+        setTimeout(() => handlePrint(), 50);
     };
 
     // Find or create a Vendure customer for this bill (so next time mobile/name search works)
@@ -932,10 +1171,10 @@ table{width:100%;border-collapse:collapse}
         } catch (err) { console.warn('ensureCustomer failed:', err.message); }
     };
 
-    const inp = "bg-white border border-[#888] h-[22px] px-1 text-[11px] font-bold text-slate-900 outline-none focus:bg-yellow-50 focus:border-[#1a5276]";
-    const lbl = "text-[11px] font-bold text-slate-900";
+    const inp = "bg-white border border-slate-300 h-[24px] px-2 text-[11px] font-bold text-slate-900 outline-none rounded-sm focus:bg-yellow-50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-300 transition";
+    const lbl = "text-[10px] font-bold text-slate-600 uppercase tracking-wider";
 
-    return (<div className="relative w-full h-full flex flex-col overflow-hidden font-sans text-[11px] select-none" style={{background:'#f4f4f4'}}>
+    return (<div className="relative w-full h-full flex flex-col overflow-hidden font-sans text-[11px] select-none bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100">
         {/* Hide number input spinners */}
         <style>{`
             .no-spin::-webkit-outer-spin-button,
@@ -948,28 +1187,56 @@ table{width:100%;border-collapse:collapse}
             {COMMON_UNITS.map(u => <option key={u} value={u}/>)}
         </datalist>
 
-        {/* ── Title bar ── */}
-        <div className="h-[22px] bg-[#7cb8c0] flex items-center px-2 justify-between shrink-0 border-b border-[#5a9da5]">
-            <h1 className="text-slate-900 font-bold text-[12px]">Retail Sales - பேர் டிபார்ட்மென்டல் ஸ்டோர் 2026-2027 - admin</h1>
-            <div className="flex items-center gap-1">
-                <button className="w-5 h-4 bg-[#c0c0c0] border border-slate-600 text-[10px] leading-none">_</button>
-                <button className="w-5 h-4 bg-[#c0c0c0] border border-slate-600 text-[10px] leading-none">□</button>
-                <button className="w-5 h-4 bg-[#c0c0c0] border border-slate-600 text-[10px] leading-none">✕</button>
+        {/* ── Title bar ── modern dark gradient with branding */}
+        <div className="h-9 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 justify-between shrink-0 shadow-sm border-b border-slate-700">
+            <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-md bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                    <span className="text-white font-black text-[12px]">A</span>
+                </div>
+                <div>
+                    <div className="text-white font-black text-[12px] tracking-wide leading-none">Retail Sales</div>
+                    <div className="text-slate-400 text-[9px] font-medium leading-none mt-0.5">பேர் டிபார்ட்மென்டல் ஸ்டோர் · 2026-2027 · admin</div>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => {
+                        // Find the row to delete: focused row first, else last filled row
+                        let idx = focusedRow;
+                        if (idx < 0 || !rows[idx]?.itemName) {
+                            // No focus → use last filled row
+                            for (let j = rows.length - 1; j >= 0; j--) {
+                                if (rows[j].itemName) { idx = j; break; }
+                            }
+                        }
+                        if (idx < 0 || !rows[idx]?.itemName) {
+                            alert('No item to delete. Click on a row first or add an item.');
+                            return;
+                        }
+                        if (confirm(`Delete "${rows[idx].itemName}" from the bill?`)) {
+                            removeRow(idx);
+                            setFocusedRow(-1);
+                        }
+                    }}
+                    title="Delete the selected row (click a row first, or press Delete key)"
+                    className="px-3 py-1 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider transition shadow-sm">🗑 Delete Row</button>
+                <button onClick={openLastBills} className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider transition">🧾 Last Bills (F12)</button>
+                <button onClick={()=>setShowParkedModal(true)} className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider transition">🅿 Parked ({parkedBills.length})</button>
             </div>
         </div>
 
-        {/* ── Sales1/2/3/4 tabs ── */}
-        <div className="shrink-0 flex bg-white pl-2 pt-1 border-b border-[#888]">
+        {/* ── Sales1/2/3/4 tabs ── modern pill-style */}
+        <div className="shrink-0 flex bg-slate-100 px-3 pt-2 pb-0 gap-1 border-b border-slate-200">
             {['Sales1'].map(t => (
                 <button key={t} onClick={()=>setActiveSalesTab(t)}
-                    className={`px-4 py-0.5 text-[11px] font-bold border-t border-l border-r border-[#888] ${activeSalesTab===t ? 'bg-white text-slate-900' : 'bg-[#e0e0e0] text-slate-700 hover:bg-[#ececec]'}`}>{t}</button>
+                    className={`px-4 py-1 text-[11px] font-bold rounded-t-md transition ${activeSalesTab===t ? 'bg-white text-slate-900 shadow-sm border border-slate-200 border-b-white -mb-px' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>{t}</button>
             ))}
         </div>
 
-        {/* ── Header form (matching screenshot) ── */}
-        <div className="shrink-0 bg-white border-b border-[#888]">
+        {/* ── Header form — modern light card with subtle tint ── */}
+        <div className="shrink-0 bg-gradient-to-b from-white to-blue-50/40 border-b border-slate-200 shadow-sm">
             {/* Row A: Book | Type | Bill No | Date | Customer | Last BillNo */}
-            <div className="flex items-center px-2 py-1 gap-2 border-b border-[#d0d0d0]">
+            <div className="flex items-center px-3 py-1.5 gap-2 border-b border-slate-200/60">
                 <label className={`${lbl} w-10 text-slate-900`}>Book</label>
                 <select value={counterName} onChange={e=>setCounterName(e.target.value)} className={`${inp} w-28 font-black`}>
                     <option>COUNTER A</option><option>COUNTER B</option><option>COUNTER C</option>
@@ -989,9 +1256,20 @@ table{width:100%;border-collapse:collapse}
                 <div className="relative flex-1">
                     <input id="cust-input" type="text" value={customerName}
                         onChange={e=>{ setCustomerName(e.target.value); setPickedCustomerId(null); }}
-                        onBlur={()=>setTimeout(()=>setShowNameSuggest(false), 150)}
-                        onFocus={()=>{ if (nameSuggestions.length > 0) setShowNameSuggest(true); }}
-                        placeholder="COUNTER SALES" className={`${inp} w-full font-bold`}/>
+                        onBlur={()=>setTimeout(()=>setShowNameSuggest(false), 200)}
+                        onFocus={async ()=>{
+                            // Always show suggestions on focus. If list is empty, fetch recent 10 first.
+                            if (nameSuggestions.length === 0) {
+                                try {
+                                    const query = `query AllCustomers { customers(options: { take: 10, sort: { createdAt: DESC } }) { items { id firstName lastName phoneNumber emailAddress addresses { streetLine1 city postalCode } } } }`;
+                                    const data = await gql(query, { useAdmin: true });
+                                    setNameSuggestions(data?.customers?.items || []);
+                                } catch {}
+                            }
+                            setNameSuggestSelIdx(0);
+                            setShowNameSuggest(true);
+                        }}
+                        placeholder="Click to see customers · Type to search" className={`${inp} w-full font-bold`}/>
                     {showNameSuggest && nameSuggestions.length > 0 && (
                         <div className="absolute top-[22px] left-0 bg-white border border-[#1a5276] shadow-2xl z-40 w-72 max-h-56 overflow-auto">
                             {nameSuggestions.map((c, idx) => (
@@ -1010,14 +1288,14 @@ table{width:100%;border-collapse:collapse}
             </div>
 
             {/* Row B: Rate Type | GSTNo | OtherState | Home Delivery | -11.510 | Cell No */}
-            <div className="flex items-center px-2 py-1 gap-2 border-b border-[#d0d0d0]">
+            <div className="flex items-center px-3 py-1.5 gap-2 border-b border-slate-200/60">
                 <label className={`${lbl} w-16`}>Rate Type -</label>
                 <select value={rateType} onChange={e=>setRateType(e.target.value)} className={`${inp} w-28 font-bold`}>
                     <option>wholsale</option><option>retail</option><option>ARate</option><option>BRate</option><option>CRate</option><option>DRate</option>
                 </select>
-                <label className="flex items-center gap-1 ml-2 cursor-pointer"><input type="checkbox" checked={igst} onChange={e=>setIgst(e.target.checked)} className="accent-emerald-600"/><span className={`${lbl} text-blue-900`}>GSTNo</span></label>
-                <label className="flex items-center gap-1 ml-2 cursor-pointer"><input type="checkbox" checked={nonAcc} onChange={e=>setNonAcc(e.target.checked)}/><span className={lbl}>OtherState</span></label>
-                <label className="flex items-center gap-1 ml-2 cursor-pointer"><input type="checkbox" checked={header} onChange={e=>setHeader(e.target.checked)}/><span className={lbl}>Home Delivery</span></label>
+                <label className="flex items-center gap-1.5 ml-2 cursor-pointer"><input type="checkbox" checked={igst} onChange={e=>setIgst(e.target.checked)} className="accent-emerald-600 w-3.5 h-3.5"/><span className={`${lbl} text-slate-800`}>GST No</span></label>
+                <label className="flex items-center gap-1.5 ml-2 cursor-pointer"><input type="checkbox" checked={nonAcc} onChange={e=>setNonAcc(e.target.checked)} className="accent-emerald-600 w-3.5 h-3.5"/><span className={lbl}>Other State</span></label>
+                <label className={`flex items-center gap-1.5 ml-2 cursor-pointer px-2 py-0.5 rounded-md transition ${header ? 'bg-amber-100 border border-amber-300' : 'border border-transparent hover:bg-slate-50'}`}><input type="checkbox" checked={header} onChange={e=>setHeader(e.target.checked)} className="accent-amber-600 w-3.5 h-3.5"/><span className={`text-[10px] font-black uppercase tracking-wider ${header ? 'text-amber-800' : 'text-slate-600'}`}>🚚 Home Delivery</span></label>
                 <span className="ml-2 text-red-600 font-bold text-[12px]">-11.510</span>
                 <label className={`${lbl} ml-6`}>Cell No <span className="text-[9px] text-blue-700 font-black">(Alt+M)</span>{mode === 'CREDIT' && <span className="text-red-600 font-black ml-1">*</span>}</label>
                 <div className="relative flex-1">
@@ -1040,30 +1318,44 @@ table{width:100%;border-collapse:collapse}
                 </div>
             </div>
 
-            {/* Address + summary info bar (compact) */}
-            <div className="flex items-stretch bg-white border-b border-[#d0d0d0]">
-                <label className={`${lbl} px-2 flex items-center border-r border-[#d0d0d0] bg-[#eaf3f8] text-slate-900`}>Address{mode === 'CREDIT' && <span className="text-red-600 font-black ml-1">*</span>}</label>
+            {/* Row B2: GST compliance — Customer GSTIN | Place of Supply | Reverse Charge */}
+            <div className="flex items-center px-3 py-1.5 gap-2 border-b border-slate-200/60 bg-emerald-50/30">
+                <label className={`${lbl} w-16`}>Cust GSTIN</label>
+                <input type="text" value={customerGstin} maxLength={15}
+                    onChange={e=>setCustomerGstin(e.target.value.toUpperCase())}
+                    placeholder="15-char GSTIN (B2B)" className={`${inp} w-44 font-mono tracking-wide`}/>
+                <label className={`${lbl} ml-3`}>Place of Supply</label>
+                <input type="text" value={placeOfSupply} maxLength={2}
+                    onChange={e=>setPlaceOfSupply(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="State code (e.g. 33)" className={`${inp} w-28`} title="2-digit GST state code"/>
+                <label className="flex items-center gap-1.5 ml-3 cursor-pointer"><input type="checkbox" checked={reverseCharge} onChange={e=>setReverseCharge(e.target.checked)} className="accent-emerald-600 w-3.5 h-3.5"/><span className={`${lbl} text-slate-800`}>Reverse Charge</span></label>
+                {customerGstin.trim() && <span className="ml-2 text-[10px] font-black text-emerald-700 uppercase">B2B</span>}
+            </div>
+
+            {/* Address + summary info bar (compact) — soft gradient */}
+            <div className="flex items-stretch bg-gradient-to-r from-blue-50 to-emerald-50/40 border-b border-slate-200">
+                <label className={`${lbl} px-3 flex items-center border-r border-slate-200 bg-slate-100/80 text-slate-700`}>Address{mode === 'CREDIT' && <span className="text-red-600 font-black ml-1">*</span>}</label>
                 <input type="text" value={customerAddress} onChange={e=>setCustomerAddress(e.target.value)} placeholder="Customer / delivery address" className="flex-1 h-[22px] px-2 text-[11px] font-bold outline-none border-r border-[#d0d0d0]"/>
                 <div className="px-3 h-[22px] flex items-center text-[11px] font-bold border-r border-[#d0d0d0] bg-[#eaf3f8] text-slate-900">No. of Units: <span className="ml-1 font-black">{totalItems.toFixed(2)}</span></div>
                 <div className="px-3 h-[22px] flex items-center text-[11px] font-bold bg-[#eaf3f8] text-slate-900">Cost: <span className="ml-1 font-black">₹{subTotal.toFixed(2)}</span></div>
             </div>
         </div>
 
-        {/* ── Main items grid ── */}
-        <div className="flex-1 overflow-auto bg-white relative">
+        {/* ── Main items grid ── modern dark header with subtle row striping */}
+        <div className="flex-1 overflow-auto bg-gradient-to-b from-slate-50 to-white relative">
             <table className="w-full text-[11px] border-collapse">
-                <thead className="bg-[#6cc2ca] text-white sticky top-0 z-10">
+                <thead className="bg-gradient-to-b from-slate-800 to-slate-700 text-white sticky top-0 z-10 shadow-sm">
                     <tr>
-                        <th className="border border-[#3aa8b0] w-10 py-0.5 font-bold">Sl...</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold">Code</th>
-                        <th className="border border-[#3aa8b0] py-0.5 font-bold">ItemName</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold">Unit</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold">Qty</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold">Rate</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold">MrpRate</th>
-                        <th className="border border-[#3aa8b0] w-20 py-0.5 font-bold bg-[#16a085] text-white">Stock</th>
-                        <th className="border border-[#3aa8b0] w-24 py-0.5 font-bold bg-[#e8b84a] text-slate-900">Amount</th>
-                        <th className="border border-[#3aa8b0] w-8 py-0.5 font-bold text-center">✕</th>
+                        <th className="border-r border-slate-600 w-10 py-1.5 font-bold uppercase tracking-wider text-[9px]">Sl</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Code</th>
+                        <th className="border-r border-slate-600 py-1.5 font-bold uppercase tracking-wider text-[9px] text-left pl-3">Item Name</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Unit</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Qty</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Rate</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">MRP</th>
+                        <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px] bg-emerald-700">Stock</th>
+                        <th className="border-r border-slate-600 w-24 py-1.5 font-bold uppercase tracking-wider text-[9px] bg-amber-600">Amount</th>
+                        <th className="w-8 py-1.5 font-bold text-center">✕</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1071,9 +1363,9 @@ table{width:100%;border-collapse:collapse}
                         const isFocused = selectedProduct && selectedProduct.code === r.code;
                         const isLast = i === rows.length - 1;
                         return (
-                        <tr key={i} onClick={() => r.itemName && selectRowForStock(r)}
-                            className="border-b border-[#e0e0e0] cursor-pointer hover:bg-blue-50"
-                            style={{background: isFocused ? '#fef9c3' : 'white'}}>
+                        <tr key={i} onClick={() => { if (r.itemName) { setFocusedRow(i); selectRowForStock(r); } }}
+                            className={`border-b border-slate-200 cursor-pointer hover:bg-blue-50 transition ${focusedRow === i ? 'ring-2 ring-inset ring-emerald-400' : ''}`}
+                            style={{background: focusedRow === i ? '#d1fae5' : isFocused ? '#fef9c3' : (i % 2 === 0 ? 'white' : '#fafbfc')}}>
                             <td className="text-center border-r border-[#e0e0e0] font-bold py-0.5">
                                 {isLast ? <span className="text-blue-700">▶</span> : r.sno}
                             </td>
@@ -1092,7 +1384,11 @@ table{width:100%;border-collapse:collapse}
                                                 className={`flex items-center gap-3 px-3 py-1 text-[11px] cursor-pointer border-b border-slate-100 ${suggestSelIdx === sIdx ? 'bg-yellow-200' : 'hover:bg-blue-50'}`}>
                                                 <span className="font-black text-slate-500 w-12">{p.code}</span>
                                                 <span className="font-black text-slate-900 flex-1 truncate">{p.itemName}</span>
-                                                {(() => { const s = getItemStock(p); return s != null && s <= 0
+                                                {(() => {
+                                                    const last = customerLastRates[String(p.code)];
+                                                    return last ? <span className="font-bold text-indigo-700 text-[9px]" title={`Last bill ${last.billNo}, ${last.billDate}`}>Last: ₹{last.rate}</span> : null;
+                                                })()}
+                                                {(() => { const s = getItemStock(p); return p.isStockBased === true && s != null && s <= 0
                                                     ? <span className="font-black text-red-600 text-[9px] uppercase">⚠ Out of Stock</span>
                                                     : <span className="font-black text-emerald-700 text-right">₹{p.salesRate || p.mrpRate || 0}</span>; })()}
                                             </div>
@@ -1117,7 +1413,11 @@ table{width:100%;border-collapse:collapse}
                                                 className={`flex items-center gap-3 px-3 py-1 text-[11px] cursor-pointer border-b border-slate-100 ${suggestSelIdx === sIdx ? 'bg-yellow-200' : 'hover:bg-blue-50'}`}>
                                                 <span className="font-black text-slate-500 w-12">{p.code}</span>
                                                 <span className="font-black text-slate-900 flex-1 truncate">{p.itemName}</span>
-                                                {(() => { const s = getItemStock(p); return s != null && s <= 0
+                                                {(() => {
+                                                    const last = customerLastRates[String(p.code)];
+                                                    return last ? <span className="font-bold text-indigo-700 text-[9px]" title={`Last bill ${last.billNo}, ${last.billDate}`}>Last: ₹{last.rate}</span> : null;
+                                                })()}
+                                                {(() => { const s = getItemStock(p); return p.isStockBased === true && s != null && s <= 0
                                                     ? <span className="font-black text-red-600 text-[9px] uppercase">⚠ Out of Stock</span>
                                                     : <span className="font-black text-emerald-700 text-right">₹{p.salesRate || p.mrpRate || 0}</span>; })()}
                                             </div>
@@ -1200,6 +1500,7 @@ table{width:100%;border-collapse:collapse}
             const stockQty = sp.minStkQty != null ? sp.minStkQty : (sp.minStock != null ? sp.minStock : null);
             const maxStock = sp.maxStkQty != null ? sp.maxStkQty : sp.maxStock;
             const lowStock = stockQty != null && stockQty <= 5;
+            const lastForCustomer = customerLastRates[String(sp.code)] || null;
             return (
                 <div className="shrink-0 flex items-center gap-3 px-3 py-0.5 border-t border-[#888] text-[10px] font-bold" style={{background:'#fef9c3'}}>
                     <span className="px-2 py-0.5 bg-[#1a5276] text-white font-black uppercase tracking-wider text-[10px] rounded">Selected</span>
@@ -1216,31 +1517,37 @@ table{width:100%;border-collapse:collapse}
                     {sp.gstPercent != null && <span className="text-slate-700">GST: <span className="font-black text-slate-900">{sp.gstPercent}%</span></span>}
                     {sp.hsnCode && <span className="text-slate-700">HSN: <span className="font-black text-slate-900">{sp.hsnCode}</span></span>}
                     {sp.expiryDate && <span className="text-slate-700">Expiry: <span className="font-black text-slate-900">{new Date(sp.expiryDate).toLocaleDateString('en-IN', {month:'short', year:'numeric'})}</span></span>}
+                    {lastForCustomer && (
+                        <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-300 font-black" title={`Bill ${lastForCustomer.billNo} on ${lastForCustomer.billDate}`}>
+                            Last for this customer: ₹{lastForCustomer.rate} ({lastForCustomer.billDate})
+                        </span>
+                    )}
                     <button onClick={()=>setSelectedProduct(null)} className="ml-auto text-slate-700 hover:text-red-600 font-black">✕</button>
                 </div>
             );
         })()}
 
         {/* ── Compact bottom: Summary (left) | Total + Checkout (center) | Payment Detail (right) ── */}
-        <div className="shrink-0 flex border-t border-[#888] bg-white">
+        <div className="shrink-0 flex border-t-2 border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 shadow-inner">
             {/* LEFT: Hotkeys + Summary table below */}
-            <div className="w-[320px] border-r border-[#888] text-[10px] bg-white flex flex-col">
+            <div className="w-[320px] border-r border-slate-300 text-[10px] bg-gradient-to-br from-slate-50 to-blue-50/30 flex flex-col">
                 {/* Hotkeys */}
-                <div className="text-[9px] font-bold text-slate-900 m-0.5">
-                    <div className="bg-[#1a5276] text-white px-2 py-0 text-[9px] uppercase tracking-widest font-black">⌨ Hotkeys</div>
-                    <div className="grid grid-cols-3 border border-[#aaa] border-t-0">
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">F1 - <u>S</u>ave</span>
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">F2 - <u>P</u>rint</span>
-                        <span className="px-2 py-0 border-b border-[#aaa]">F3 - Discount</span>
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">Alt+<u>C</u> - Customer</span>
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">Alt+<u>M</u> - Mobile</span>
-                        <span className="px-2 py-0 border-b border-[#aaa]">Alt+<u>I</u> - Item</span>
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">F6 - New Cust.</span>
-                        <span className="px-2 py-0 border-r border-b border-[#aaa]">F7 - Hold</span>
-                        <span className="px-2 py-0 border-b border-[#aaa]">F8 - Parked</span>
-                        <span className="px-2 py-0 border-r border-[#aaa] bg-emerald-100">F10 - <b>Checkout</b></span>
-                        <span className="px-2 py-0 border-r border-[#aaa]">F11 - Cell No</span>
-                        <span className="px-2 py-0">Esc - Close</span>
+                <div className="text-[9px] font-bold m-1">
+                    <div className="bg-slate-800 text-white px-2 py-1 text-[9px] uppercase tracking-[2px] font-black rounded-t-md">⌨ Hotkeys</div>
+                    <div className="grid grid-cols-3 border border-slate-300 border-t-0 rounded-b-md bg-white">
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">F1 · <u>S</u>ave</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">F2 · <u>P</u>rint</span>
+                        <span className="px-2 py-1 border-b border-slate-200 text-slate-700 hover:bg-slate-50">F3 · Discount</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">Alt+<u>C</u> · Customer</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">Alt+<u>M</u> · Mobile</span>
+                        <span className="px-2 py-1 border-b border-slate-200 text-slate-700 hover:bg-slate-50">Alt+<u>I</u> · Item</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">F6 · New Cust.</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">F7 · Hold</span>
+                        <span className="px-2 py-1 border-b border-slate-200 text-slate-700 hover:bg-slate-50">F8 · Parked</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 bg-emerald-50 text-emerald-800 font-black">F10 · Checkout</span>
+                        <span className="px-2 py-1 border-r border-b border-slate-200 text-slate-700 hover:bg-slate-50">F11 · Cell No</span>
+                        <span className="px-2 py-1 border-b border-slate-200 bg-indigo-50 text-indigo-800 font-black">F12 · Last Bills</span>
+                        <span className="px-2 py-1 text-slate-600 col-span-3 text-center bg-slate-50">Esc · Close any modal / dropdown</span>
                     </div>
                 </div>
                 {/* Summary table — moved here from right panel */}
@@ -1277,24 +1584,24 @@ table{width:100%;border-collapse:collapse}
                 </div>
             </div>
 
-            {/* CENTER: Total + Checkout button */}
-            <div className="flex-1 flex flex-col items-center justify-center py-3 px-3" style={{background:'#6cc2ca'}}>
-                <span className="text-red-600 font-bold text-[12px] italic leading-none">TOTAL</span>
-                <span className="text-[#1a1a7e] font-black text-[28px] leading-none mt-1">₹{grandTotal.toFixed(2)}</span>
+            {/* CENTER: Total + Checkout button — modern gradient */}
+            <div className="flex-1 flex flex-col items-center justify-center py-4 px-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 border-l border-r border-slate-200">
+                <span className="text-slate-500 font-bold text-[10px] uppercase tracking-[4px] leading-none">Grand Total</span>
+                <span className="text-slate-900 font-black text-[36px] leading-none mt-2 tracking-tight">₹{grandTotal.toFixed(2)}</span>
                 <button onClick={showCheckout ? confirmCheckout : openCheckout}
-                    className={`mt-2 px-6 py-2 ${showCheckout ? 'bg-emerald-700 hover:bg-emerald-600 border-emerald-900' : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-800'} border-2 text-white font-black text-[13px] uppercase tracking-widest shadow-lg rounded transition active:scale-95`}>
+                    className={`mt-3 px-8 py-3 ${showCheckout ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500'} text-white font-black text-[13px] uppercase tracking-widest shadow-lg shadow-emerald-500/30 rounded-lg transition-all active:scale-95`}>
                     {showCheckout ? '✓ CONFIRM & SAVE' : '💰 CHECKOUT (F10)'}
                 </button>
                 {showCheckout && (
-                    <button onClick={()=>setShowCheckout(false)} className="mt-1 text-[10px] text-slate-700 hover:text-red-600 font-bold underline">✕ Cancel</button>
+                    <button onClick={()=>setShowCheckout(false)} className="mt-2 text-[10px] text-slate-600 hover:text-red-600 font-bold underline transition">✕ Cancel</button>
                 )}
             </div>
 
             {/* RIGHT: Payment Detail only (Summary moved to LEFT panel) */}
-            <div className="w-[340px] border-l border-[#888] bg-white flex flex-col">
-                {/* Payment Detail — always rendered, fields disabled until Checkout clicked */}
-                <div className={`bg-gradient-to-r from-[#5b3f8f] to-[#7c5cb5] py-1 text-center transition`}>
-                    <h3 className="text-white font-black text-[12px] uppercase tracking-widest">Payment Detail {!showCheckout && <span className="text-cyan-200 text-[9px] normal-case ml-1">(Click CHECKOUT to enable)</span>}</h3>
+            <div className="w-[340px] border-l border-slate-300 bg-gradient-to-br from-indigo-50/50 to-violet-50/30 flex flex-col">
+                {/* Payment Detail — modern indigo gradient header */}
+                <div className={`bg-gradient-to-r from-indigo-600 to-violet-600 py-1.5 text-center transition shadow-sm`}>
+                    <h3 className="text-white font-black text-[11px] uppercase tracking-[3px]">Payment Detail {!showCheckout && <span className="text-indigo-200 text-[9px] normal-case ml-1 tracking-normal">(Click CHECKOUT to enable)</span>}</h3>
                 </div>
                 <table className="w-full text-[12px]">
                     <tbody>
@@ -1413,5 +1720,116 @@ table{width:100%;border-collapse:collapse}
                 </div>
             </div>
         </div>)}
+
+        {/* ═══ LAST BILLS MODAL (F12) — with filter search ═══ */}
+        {showLastBills && (() => {
+            const q = (lastBillsFilter || '').toLowerCase().trim();
+            const filtered = !q ? lastBills : lastBills.filter(b =>
+                (b.customerName || '').toLowerCase().includes(q) ||
+                (b.customerPhone || '').toLowerCase().includes(q) ||
+                (b.billDate || '').toLowerCase().includes(q) ||
+                (b.billTime || '').toLowerCase().includes(q) ||
+                String(b.billNo || '').toLowerCase().includes(q) ||
+                String(b.grandTotal || '').toLowerCase().includes(q) ||
+                (b.saleType || '').toLowerCase().includes(q)
+            );
+            return (
+            <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white max-w-6xl w-full max-h-[88vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col border-2 border-emerald-600">
+                    <div className="bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 px-6 py-4 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-white font-black text-[16px] uppercase tracking-[2px] flex items-center gap-2">🧾 Last Bills <span className="px-2 py-0.5 bg-white/20 rounded-full text-[11px]">{filtered.length} / {lastBills.length}</span></h2>
+                            <p className="text-emerald-50 text-[10px] font-bold mt-1 tracking-wide">Double-click row to EDIT in sales screen · Click Reprint button to print</p>
+                        </div>
+                        <button onClick={()=>setShowLastBills(false)} className="text-white hover:bg-red-500 w-8 h-8 rounded-full flex items-center justify-center font-black text-lg transition">✕</button>
+                    </div>
+                    {/* Search bar */}
+                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex items-center gap-3">
+                        <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                            <input
+                                ref={lastBillsSearchRef}
+                                type="text"
+                                value={lastBillsFilter}
+                                onChange={e => setLastBillsFilter(e.target.value)}
+                                placeholder="Search by customer name, mobile, bill no, date, time, amount..."
+                                className="w-full h-10 pl-10 pr-4 text-[13px] font-bold text-slate-900 bg-white border-2 border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition"
+                            />
+                            {lastBillsFilter && (
+                                <button onClick={()=>setLastBillsFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 font-black">✕</button>
+                            )}
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            Tip: type any field — name / phone / date / time / bill no / amount
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-auto bg-slate-50">
+                        {filtered.length === 0 ? (
+                            <div className="text-center py-20">
+                                <div className="text-6xl mb-3">{lastBills.length === 0 ? '📭' : '🔍'}</div>
+                                <p className="text-slate-900 font-bold text-[14px]">{lastBills.length === 0 ? 'No bills yet' : 'No bills match your filter'}</p>
+                                <p className="text-slate-600 text-[11px] font-bold mt-1">{lastBills.length === 0 ? 'Save a bill (F1) and it\'ll appear here.' : 'Try a different search term or clear the filter.'}</p>
+                            </div>
+                        ) : (
+                            <table className="w-full text-[12px] border-collapse">
+                                <thead className="bg-gradient-to-b from-slate-100 to-slate-200 sticky top-0">
+                                    <tr>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-12">#</th>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-24">Bill No</th>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-28">Date</th>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-20">Time</th>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px]">Customer</th>
+                                        <th className="py-2.5 px-3 text-left border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-32">Mobile</th>
+                                        <th className="py-2.5 px-3 text-center border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-20">Mode</th>
+                                        <th className="py-2.5 px-3 text-right border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-28">Total</th>
+                                        <th className="py-2.5 px-3 text-center border-b border-slate-300 font-black text-slate-700 uppercase tracking-wider text-[9px] w-56">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filtered.map((b, i) => (
+                                    <tr key={`${b.source}-${b.billNo}-${i}`}
+                                        onDoubleClick={()=>loadBillForEdit(b)}
+                                        className="border-b border-slate-200 hover:bg-emerald-50 cursor-pointer transition"
+                                        title="Double-click to edit in sales screen">
+                                        <td className="py-2 px-3 font-bold text-slate-700">{i + 1}</td>
+                                        <td className="py-2 px-3 font-black text-emerald-700">{b.billNo}</td>
+                                        <td className="py-2 px-3 font-bold text-slate-900">{b.billDate}</td>
+                                        <td className="py-2 px-3 font-bold text-slate-600">{b.billTime || '-'}</td>
+                                        <td className="py-2 px-3 font-bold text-slate-900">{b.customerName || 'Walk-in'}</td>
+                                        <td className="py-2 px-3 font-bold text-slate-700">{b.customerPhone || '-'}</td>
+                                        <td className="py-2 px-3 text-center"><span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${b.saleType === 'CREDIT' ? 'bg-orange-100 text-orange-700' : b.saleType === 'CASH' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{b.saleType || 'CASH'}</span></td>
+                                        <td className="py-2 px-3 text-right font-black text-slate-900">₹{(b.grandTotal || 0).toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-center">
+                                            <div className="flex items-center justify-center gap-1.5">
+                                                <button onClick={(e)=>{e.stopPropagation(); loadBillForEdit(b);}} className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] uppercase rounded shadow-sm transition" title="Load to sales screen for editing">✎ Edit</button>
+                                                <button onClick={(e)=>{e.stopPropagation(); reprintBill(b);}} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase rounded shadow-sm transition" title="Print bill">🖨 Print</button>
+                                                <button onClick={(e)=>{e.stopPropagation(); deleteBill(b);}} className="px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white font-black text-[10px] uppercase rounded shadow-sm transition" title="Delete bill permanently">🗑 Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-3 border-t border-slate-200 text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                        <span className="flex items-center gap-3">
+                            <span className="flex items-center gap-1.5"><kbd className="px-2 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-black shadow-sm">Double-click</kbd> Edit</span>
+                            <span className="flex items-center gap-1.5"><kbd className="px-2 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-black shadow-sm">Esc</kbd> Close</span>
+                        </span>
+                        <span className="text-emerald-700 font-black uppercase tracking-wider text-[10px]">Showing {filtered.length} of {lastBills.length} bills</span>
+                    </div>
+                </div>
+            </div>
+            );
+        })()}
+
+        {/* ═══ GST TAX INVOICE — preview / open / save / print (backend-sourced) ═══ */}
+        <InvoicePreviewModal
+            open={invoiceModalOpen}
+            onOpenChange={setInvoiceModalOpen}
+            saleId={invoiceTarget.saleId}
+            billNo={invoiceTarget.billNo}
+            sizeMode={billSize}
+        />
     </div>);
 }

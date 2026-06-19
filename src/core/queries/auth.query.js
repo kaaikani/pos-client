@@ -1,4 +1,4 @@
-import { gql, getAuthToken, setAuthToken } from './gql';
+import { gql, getAuthToken, setAuthToken, clearAuthToken } from './gql';
 
 // ══════════════════════════════════════════════════════════════
 // VENDURE NATIVE LOGIN — uses Administrator + Role system
@@ -19,6 +19,15 @@ function detectRole(currentUser, adminRoles = []) {
 
 export class VendureLoginCommand {
     async execute(username, password) {
+        // Clear any stale in-memory token before logging in.
+        // Without this, a leftover Bearer header from a prior session can cause
+        // the first login attempt to fail (server rejects mixed auth state),
+        // requiring a second click to succeed.
+        clearAuthToken();
+        if (typeof window !== 'undefined') {
+            try { localStorage.removeItem('pos_session'); } catch {}
+        }
+
         const LOGIN_QUERY = `
             mutation VendureLogin($username: String!, $password: String!) {
                 login(username: $username, password: $password) {

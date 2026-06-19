@@ -6,7 +6,17 @@ const TTL = 60_000; // 1 min cache
 // ══════════════════════════════════════════════════════════════
 // ITEMS
 // ══════════════════════════════════════════════════════════════
-const ITEM_FIELDS = `id createdAt updatedAt code itemName tamilName category groupName brand hsnCode barcode upcCode unit packingUnit size taxName mfr purchaseRate salesRate mrpRate costRate cRate rateA rateB rateC rateD lastPurchaseRate lastSaleRate gstPercent discount profitMargin incentivePct batchNo mfgDate expiryDate serialNo minStock maxStock minStkQty maxStkQty isWeightBased isExpiryEnabled allowExpiry sizesJson`;
+const ITEM_FIELDS = `id createdAt updatedAt code itemName tamilName category groupName brand hsnCode barcode upcCode unit packingUnit size taxName mfr purchaseRate salesRate mrpRate costRate cRate rateA rateB rateC rateD lastPurchaseRate lastSaleRate gstPercent priceIncludesTax taxMasterId discount profitMargin incentivePct batchNo mfgDate expiryDate serialNo minStock maxStock minStkQty maxStkQty isWeightBased isExpiryEnabled allowExpiry isStockBased sizesJson`;
+
+// POS GST tax masters (id → ratePercent/taxType) for live-cart tax resolution.
+export class PosTaxMastersQuery {
+    async execute() {
+        return cachedFetch('pos:taxMasters', async () => {
+            const data = await gql(`query PosTaxMasters { posTaxMasters { id ratePercent taxType } }`, { useAdmin: true });
+            return data?.posTaxMasters || [];
+        }, 60_000);
+    }
+}
 
 export class ListItemsQuery {
     async execute() {
@@ -94,6 +104,68 @@ export class DeleteItemCommand {
         const data = await gql(`mutation DelItem($id: ID!) { deletePharmaItem(id: $id) }`, { useAdmin: true, variables: { id } });
         invalidateCache('pharma:items');
         return data.deletePharmaItem;
+    }
+}
+
+/**
+ * Delete a PharmaItem AND its matching Vendure variant/product (matched by SKU = item.code).
+ * Silent on Vendure failures (returns whether each side succeeded).
+ */
+export class DeleteItemEverywhereCommand {
+    async execute(item) {
+        const result = { pharma: false, vendureVariant: false, vendureProduct: false };
+
+        // 1) Delete PharmaItem (local)
+        try {
+            await new DeleteItemCommand().execute(item.id);
+            result.pharma = true;
+        } catch (e) {
+            console.warn('PharmaItem delete failed:', e.message);
+        }
+
+        // 2) Find matching Vendure variant by SKU and delete it (+ parent product if empty)
+        const sku = String(item.code || '').trim();
+        if (sku) {
+            try {
+                const lookup = await gql(`
+                    query FindVariantBySku($sku: String!) {
+                        productVariants(options: { filter: { sku: { eq: $sku } }, take: 1 }) {
+                            items { id productId product { id variantList(options: { take: 5 }) { totalItems } } }
+                        }
+                    }
+                `, { useAdmin: true, variables: { sku } });
+                const variant = lookup?.productVariants?.items?.[0];
+                if (variant?.id) {
+                    try {
+                        await gql(`
+                            mutation DelVariants($ids: [ID!]!) {
+                                deleteProductVariants(ids: $ids) { result message }
+                            }
+                        `, { useAdmin: true, variables: { ids: [variant.id] } });
+                        result.vendureVariant = true;
+                    } catch (e) {
+                        console.warn('Vendure variant delete failed:', e.message);
+                    }
+                    // If the parent product only had this one variant, remove the product too
+                    if (variant.product?.variantList?.totalItems <= 1 && variant.productId) {
+                        try {
+                            await gql(`
+                                mutation DelProduct($id: ID!) {
+                                    deleteProduct(id: $id) { result message }
+                                }
+                            `, { useAdmin: true, variables: { id: variant.productId } });
+                            result.vendureProduct = true;
+                        } catch (e) {
+                            console.warn('Vendure product delete failed:', e.message);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Vendure variant lookup failed:', e.message);
+            }
+        }
+
+        return result;
     }
 }
 

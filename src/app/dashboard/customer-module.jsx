@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Search, User, Phone, Mail, MapPin, Plus, Download, RefreshCw, X } from 'lucide-react';
+import { Search, User, Phone, Mail, MapPin, Plus, Download, RefreshCw, X, Pencil } from 'lucide-react';
 import { gql } from '../../core/queries/gql';
 
 const CUSTOMER_FIELDS = `id firstName lastName phoneNumber emailAddress
-    addresses { streetLine1 streetLine2 city province postalCode country { name } }`;
+    addresses { id streetLine1 streetLine2 city province postalCode country { code name } }`;
 
 async function fetchCustomers(term) {
     const t = (term || '').trim();
@@ -35,7 +35,10 @@ export default function CustomerModule() {
     const [customers, setCustomers] = useState([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [addOpen, setAddOpen] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
+    const [mode, setMode] = useState('add');
+    const [editingId, setEditingId] = useState(null);
+    const [editingAddressId, setEditingAddressId] = useState(null);
     const [form, setForm] = useState({ firstName: '', lastName: '', phoneNumber: '', emailAddress: '', streetLine1: '', city: '', postalCode: '' });
 
     const load = async (term) => {
@@ -56,8 +59,28 @@ export default function CustomerModule() {
     }, [search]);
 
     const openAdd = () => {
+        setMode('add');
+        setEditingId(null);
+        setEditingAddressId(null);
         setForm({ firstName: '', lastName: '', phoneNumber: '', emailAddress: '', streetLine1: '', city: '', postalCode: '' });
-        setAddOpen(true);
+        setModalOpen(true);
+    };
+
+    const openEdit = (customer) => {
+        const addr = customer.addresses?.[0];
+        setMode('edit');
+        setEditingId(customer.id);
+        setEditingAddressId(addr?.id || null);
+        setForm({
+            firstName: customer.firstName || '',
+            lastName: (customer.lastName && customer.lastName !== '-') ? customer.lastName : '',
+            phoneNumber: customer.phoneNumber || '',
+            emailAddress: (customer.emailAddress && !customer.emailAddress.includes('@avs.local')) ? customer.emailAddress : '',
+            streetLine1: addr?.streetLine1 || '',
+            city: addr?.city || '',
+            postalCode: addr?.postalCode || '',
+        });
+        setModalOpen(true);
     };
 
     const submitAdd = async () => {
@@ -95,7 +118,63 @@ export default function CustomerModule() {
                     } } });
                 } catch (e) { console.warn('Address save failed:', e.message); }
             }
-            setAddOpen(false);
+            setModalOpen(false);
+            await load(search);
+        } catch (err) { alert(err.message); }
+    };
+
+    const submitEdit = async () => {
+        const { firstName, phoneNumber, emailAddress } = form;
+        if (!firstName.trim() || !phoneNumber.trim()) return alert('First Name and Mobile Number are required.');
+        try {
+            const updateInput = {
+                id: editingId,
+                firstName: firstName.trim(),
+                lastName: form.lastName.trim() || '-',
+                phoneNumber: phoneNumber.trim(),
+            };
+            if (emailAddress.trim()) {
+                updateInput.emailAddress = emailAddress.trim();
+            }
+            const updateQ = `mutation UpdateCust($input: UpdateCustomerInput!) {
+                updateCustomer(input: $input) {
+                    ... on Customer { id firstName lastName phoneNumber emailAddress }
+                    ... on ErrorResult { errorCode message }
+                }
+            }`;
+            const data = await gql(updateQ, { useAdmin: true, variables: { input: updateInput } });
+            if (data?.updateCustomer?.errorCode) {
+                return alert('Failed: ' + data.updateCustomer.message);
+            }
+            if (form.streetLine1.trim()) {
+                if (editingAddressId) {
+                    const updAddrQ = `mutation UpdAddr($input: UpdateAddressInput!) {
+                        updateCustomerAddress(input: $input) { id }
+                    }`;
+                    try {
+                        await gql(updAddrQ, { useAdmin: true, variables: { input: {
+                            id: editingAddressId,
+                            streetLine1: form.streetLine1.trim(),
+                            city: form.city.trim() || '',
+                            postalCode: form.postalCode.trim() || '',
+                            countryCode: 'IN',
+                        } } });
+                    } catch (e) { console.warn('Address update failed:', e.message); }
+                } else {
+                    const addrQ = `mutation AddAddress($id: ID!, $input: CreateAddressInput!) {
+                        createCustomerAddress(customerId: $id, input: $input) { id }
+                    }`;
+                    try {
+                        await gql(addrQ, { useAdmin: true, variables: { id: editingId, input: {
+                            streetLine1: form.streetLine1.trim(),
+                            city: form.city.trim() || '',
+                            postalCode: form.postalCode.trim() || '',
+                            countryCode: 'IN',
+                        } } });
+                    } catch (e) { console.warn('Address save failed:', e.message); }
+                }
+            }
+            setModalOpen(false);
             await load(search);
         } catch (err) { alert(err.message); }
     };
@@ -162,6 +241,7 @@ export default function CustomerModule() {
                                     <th className="p-4 text-xs uppercase font-black tracking-widest text-slate-700">Mobile</th>
                                     <th className="p-4 text-xs uppercase font-black tracking-widest text-slate-700">Email</th>
                                     <th className="p-4 text-xs uppercase font-black tracking-widest text-slate-700">Address</th>
+                                    <th className="p-4 text-xs uppercase font-black tracking-widest text-slate-700 text-right pr-6">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -193,6 +273,11 @@ export default function CustomerModule() {
                                                     <span className="inline-flex items-center gap-1.5 font-bold text-slate-600 text-xs"><MapPin size={12}/> {[addr.streetLine1, addr.city, addr.postalCode].filter(Boolean).join(', ')}</span>
                                                 ) : <span className="text-slate-400 text-xs">—</span>}
                                             </td>
+                                            <td className="p-4 pr-6 text-right">
+                                                <button onClick={() => openEdit(c)} title="Edit customer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider transition active:scale-95">
+                                                    <Pencil size={13}/> Edit
+                                                </button>
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -202,13 +287,13 @@ export default function CustomerModule() {
                 )}
             </div>
 
-            {/* Add Customer Modal */}
-            {addOpen && (
+            {/* Add / Edit Customer Modal */}
+            {modalOpen && (
                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-5 flex items-center justify-between">
-                            <h2 className="text-lg font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2"><User size={20}/> New Customer</h2>
-                            <button onClick={() => setAddOpen(false)} className="text-slate-300 hover:text-white"><X size={22}/></button>
+                            <h2 className="text-lg font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2"><User size={20}/> {mode === 'edit' ? 'Edit Customer' : 'New Customer'}</h2>
+                            <button onClick={() => setModalOpen(false)} className="text-slate-300 hover:text-white"><X size={22}/></button>
                         </div>
                         <div className="p-6 bg-slate-50 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
@@ -237,8 +322,8 @@ export default function CustomerModule() {
                                     <input value={form.postalCode} onChange={e=>setForm({...form, postalCode: e.target.value})} placeholder="PIN" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"/>
                                 </div>
                             </div>
-                            <button onClick={submitAdd} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-xl font-black uppercase tracking-widest text-sm transition shadow-lg shadow-emerald-500/30 active:scale-[0.98]">
-                                Save Customer
+                            <button onClick={mode === 'edit' ? submitEdit : submitAdd} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-xl font-black uppercase tracking-widest text-sm transition shadow-lg shadow-emerald-500/30 active:scale-[0.98]">
+                                {mode === 'edit' ? 'Update Customer' : 'Save Customer'}
                             </button>
                         </div>
                     </div>

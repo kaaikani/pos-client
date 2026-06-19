@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { ListItemsQuery, CreateItemCommand, UpdateItemCommand, DeleteItemCommand, ListTaxRatesQuery, SyncItemToVendureCommand } from '../../core/queries/pharma.query';
+import { ListItemsQuery, CreateItemCommand, UpdateItemCommand, DeleteItemCommand, DeleteItemEverywhereCommand, ListTaxRatesQuery, SyncItemToVendureCommand } from '../../core/queries/pharma.query';
 
 const DEFAULT_TAXES = [
     { id: 'exempt', name: 'Exempted', value: 0 },
@@ -29,12 +29,59 @@ export default function ItemMasterModule() {
     const loadAll = async () => {
         setLoading(true);
         try {
+            // Pull from Vendure first so any items added on the Vendure side are
+            // mirrored into PharmaItem before we display the list.
+            await syncFromVendureSilently();
             const list = await new ListItemsQuery().execute();
             setItems(list);
             if (list.length > 0) { setForm(list[0]); setSelectedIdx(0); setMode('view'); }
             else { setForm(blankForm(1)); setMode('new'); }
         } catch (e) { console.error(e); }
         setLoading(false);
+    };
+
+    // Fetch Vendure ProductVariants and create matching PharmaItems for any SKU
+    // that doesn't already exist locally. Quiet on failure (e.g. tax zone not set).
+    const syncFromVendureSilently = async () => {
+        try {
+            const { gql } = await import('../../core/queries/gql');
+            const data = await gql(`
+                query VendureVariants {
+                    productVariants(options: { take: 200 }) {
+                        items { id sku name price }
+                    }
+                }
+            `, { useAdmin: true });
+            const vendureVariants = data?.productVariants?.items || [];
+            if (vendureVariants.length === 0) return;
+
+            const { CreateItemCommand } = await import('../../core/queries/pharma.query');
+            const existing = await new ListItemsQuery().execute();
+            const existingCodes = new Set(existing.map(i => String(i.code)));
+
+            for (const v of vendureVariants) {
+                const sku = String(v.sku || '').trim();
+                if (!sku || existingCodes.has(sku)) continue;
+                const priceMajor = (v.price || 0) / 100;
+                try {
+                    await new CreateItemCommand().execute({
+                        code: sku,
+                        itemName: v.name || `Vendure Item ${sku}`,
+                        salesRate: priceMajor,
+                        mrpRate: priceMajor,
+                        rateA: priceMajor,
+                        rateB: priceMajor,
+                        rateC: priceMajor,
+                        rateD: priceMajor,
+                        gstPercent: 5,
+                        taxName: 'GST 5%',
+                        barcode: sku,
+                    });
+                } catch (e) { /* ignore individual failures (e.g. duplicate code) */ }
+            }
+        } catch (err) {
+            console.warn('Vendure → PharmaItem sync skipped:', err.message);
+        }
     };
 
     const loadTaxes = async () => {
@@ -67,6 +114,7 @@ export default function ItemMasterModule() {
         mrpRate: '0.00', salesRate: '0.00', incentivePct: '0.0',
         costRate: '0.00', cRate: '0.00', minStkQty: '0.00', maxStkQty: '0.00',
         allowExpiry: false,
+        isStockBased: false,
         rateA: '0.00', rateB: '0.00', rateC: '0.00', rateD: '0.00',
         sizes: [{ size: 'NA', rate: '0.00' }],
     });
@@ -89,8 +137,14 @@ export default function ItemMasterModule() {
         if (selectedIdx < 0) return alert('Select an item first.');
         const item = items[selectedIdx];
         if (!item?.id) return;
-        if (!confirm('Delete this item?')) return;
-        try { await new DeleteItemCommand().execute(item.id); await loadAll(); } catch (err) { alert(err.message); }
+        if (!confirm(`Delete "${item.itemName}"?\n\nThis will also remove the matching product from Vendure (if present).`)) return;
+        try {
+            const r = await new DeleteItemEverywhereCommand().execute(item);
+            if (!r.pharma) throw new Error('Failed to delete locally.');
+            await loadAll();
+        } catch (err) {
+            alert(err.message);
+        }
     };
 
     const handleClose = () => {
@@ -164,6 +218,7 @@ export default function ItemMasterModule() {
             allowExpiry: !!form.allowExpiry,
             isExpiryEnabled: form.isExpiryEnabled !== false,
             isWeightBased: !!form.isWeightBased,
+            isStockBased: !!form.isStockBased,
             sizes: (form.sizes || []).map(s => ({ size: String(s.size || ''), rate: parseFloat(s.rate) || 0 })),
         };
         try {
@@ -332,6 +387,10 @@ export default function ItemMasterModule() {
                         <label className="flex items-center gap-1.5 ml-6 cursor-pointer">
                             <input type="checkbox" checked={form.allowExpiry || false} onChange={e=>updateForm('allowExpiry',e.target.checked)} disabled={!isEditing} className="w-3.5 h-3.5 border-slate-400"/>
                             <span className={labelStyle}>Allow Expiry</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 ml-6 cursor-pointer" title="When ON: bill entry blocks if stock is zero / insufficient. When OFF: bill allowed even if stock is negative.">
+                            <input type="checkbox" checked={form.isStockBased || false} onChange={e=>updateForm('isStockBased',e.target.checked)} disabled={!isEditing} className="w-3.5 h-3.5 border-slate-400"/>
+                            <span className={labelStyle}>Stock Based</span>
                         </label>
                     </div>
                 </div>

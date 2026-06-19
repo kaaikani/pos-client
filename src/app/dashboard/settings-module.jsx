@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, Edit3, CheckCircle, UserPlus, Database, KeyRound, Settings as SettingsIcon, ScanLine, Printer, X, Save, Download, Minus, Square, Eye, EyeOff, ShieldCheck, User as UserIcon, Trash2, ToggleLeft, ToggleRight, Lock, RefreshCw } from 'lucide-react';
 import { PosListUsersQuery, PosCreateUserCommand, PosUpdateUserCommand, PosDeleteUserCommand, ListRolesQuery, GetRoleQuery, UpdateRolePermissionsCommand } from '../../core/queries/auth.query';
+import { PosCompaniesQuery, CreatePosCompanyCommand, UpdatePosCompanyCommand, SetActivePosCompanyCommand, DeletePosCompanyCommand, companyFormToInput } from '../../core/queries/company.query';
 
 const PERMISSION_LIST = [
     'Authenticated', 'SuperAdmin', 'Owner', 'Public',
@@ -46,7 +47,7 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
     const [activeCompanyId, setActiveCompanyId] = useState('');
 
     // Company form
-    const [form, setForm] = useState({ name: '', gst: '', phone: '', email: '', address: '', state: '', pincode: '', financialYear: '2026-2027' });
+    const [form, setForm] = useState({ name: '', gst: '', phone: '', email: '', address: '', state: '', stateCode: '', pincode: '', financialYear: '2026-2027' });
     const [editingId, setEditingId] = useState(null);
 
     // Change password
@@ -160,38 +161,61 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
     };
 
     useEffect(() => {
+        // Instant render from the optional localStorage cache, then refresh from backend.
         setCompanies(loadCompanies());
         setActiveCompanyId(loadActiveCompany());
         setConfig(prev => ({ ...prev, ...loadConfig() }));
         setPrintCfg(prev => ({ ...prev, ...loadPrintSettings() }));
+        fetchCompanies();
     }, []);
 
-    // ── Company Creation ──
-    const handleCompanyCreate = () => {
-        if (!form.name.trim()) return alert('Company name is required.');
-        const newCompany = { ...form, id: 'COM-' + Date.now(), createdAt: new Date().toISOString() };
-        const updated = [...companies, newCompany];
-        setCompanies(updated); saveCompanies(updated);
-        setForm({ name: '', gst: '', phone: '', email: '', address: '', state: '', pincode: '', financialYear: '2026-2027' });
-        alert(`Company "${newCompany.name}" created.`);
+    // ── Load companies from backend (source of truth); cache to localStorage. ──
+    const fetchCompanies = async () => {
+        try {
+            const list = await new PosCompaniesQuery().execute();
+            setCompanies(list);
+            saveCompanies(list); // optional cache
+            const active = list.find(c => c.isActive);
+            setActiveCompanyId(active ? active.id : '');
+            if (active) localStorage.setItem(ACTIVE_COMPANY_KEY, active.id);
+            else localStorage.removeItem(ACTIVE_COMPANY_KEY);
+        } catch (err) {
+            console.error('Failed to load companies from backend:', err);
+        }
     };
 
-    // ── Company Updation ──
-    const handleCompanyUpdate = () => {
+    // ── Company Creation (backend) ──
+    const handleCompanyCreate = async () => {
+        if (!form.name.trim()) return alert('Company name is required.');
+        try {
+            const created = await new CreatePosCompanyCommand().execute(companyFormToInput(form));
+            await fetchCompanies();
+            setForm({ name: '', gst: '', phone: '', email: '', address: '', state: '', stateCode: '', pincode: '', financialYear: '2026-2027' });
+            alert(`Company "${created.name}" saved.`);
+        } catch (err) { alert(err.message); }
+    };
+
+    // ── Company Updation (backend) ──
+    const handleCompanyUpdate = async () => {
         if (!editingId) return alert('Select a company to update.');
-        const updated = companies.map(c => c.id === editingId ? { ...c, ...form } : c);
-        setCompanies(updated); saveCompanies(updated);
-        alert(`Company updated successfully.`);
+        try {
+            await new UpdatePosCompanyCommand().execute(editingId, companyFormToInput(form));
+            await fetchCompanies();
+            resetForm();
+            alert('Company updated successfully.');
+        } catch (err) { alert(err.message); }
     };
 
     const loadCompanyToForm = (c) => { setEditingId(c.id); setForm({ ...c }); };
 
-    // ── Company Selection ──
-    const handleSelectCompany = (id) => {
-        setActiveCompanyId(id);
-        localStorage.setItem(ACTIVE_COMPANY_KEY, id);
-        const c = companies.find(c => c.id === id);
-        alert(`Active company: ${c?.name}`);
+    // ── Company Selection (backend) ──
+    const handleSelectCompany = async (id) => {
+        try {
+            await new SetActivePosCompanyCommand().execute(id);
+            await fetchCompanies();
+            const c = companies.find(c => c.id === id);
+            alert(`Active company: ${c?.name || ''}`);
+        } catch (err) { alert(err.message); }
     };
 
     // ── Change Password ──
@@ -384,26 +408,21 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
         el?.scrollIntoView({ block: 'nearest' });
     }, [configRowIdx, section]);
 
-    // ── Delete a company ──
-    const handleCompanyDelete = (id) => {
+    // ── Delete a company (backend soft-delete) ──
+    const handleCompanyDelete = async (id) => {
         const c = companies.find(x => x.id === id);
         if (!c) return;
         if (!confirm(`Delete company "${c.name}"? This cannot be undone.`)) return;
-        const updated = companies.filter(x => x.id !== id);
-        setCompanies(updated); saveCompanies(updated);
-        if (activeCompanyId === id) {
-            setActiveCompanyId('');
-            localStorage.removeItem(ACTIVE_COMPANY_KEY);
-        }
-        if (editingId === id) {
-            setEditingId(null);
-            setForm({ name: '', gst: '', phone: '', email: '', address: '', state: '', pincode: '', financialYear: '2026-2027' });
-        }
+        try {
+            await new DeletePosCompanyCommand().execute(id);
+            await fetchCompanies();
+            if (editingId === id) resetForm();
+        } catch (err) { alert(err.message); }
     };
 
     const resetForm = () => {
         setEditingId(null);
-        setForm({ name: '', gst: '', phone: '', email: '', address: '', state: '', pincode: '', financialYear: '2026-2027' });
+        setForm({ name: '', gst: '', phone: '', email: '', address: '', state: '', stateCode: '', pincode: '', financialYear: '2026-2027' });
     };
 
     return (<div className="flex flex-col h-[85vh] rounded-md overflow-hidden font-sans shadow-xl border border-slate-400" style={{background:'#eaf2f8'}}>
@@ -467,10 +486,14 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
                                 <label className={`${lbl} block mb-1`}>Address</label>
                                 <textarea value={form.address} onChange={e=>setForm({...form, address: e.target.value})} placeholder="Street, City" rows={2} className={`${inp} w-full resize-none py-1`}/>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                                 <div>
                                     <label className={`${lbl} block mb-1`}>State</label>
                                     <input type="text" value={form.state} onChange={e=>setForm({...form, state: e.target.value})} placeholder="Tamil Nadu" className={`${inp} w-full`}/>
+                                </div>
+                                <div>
+                                    <label className={`${lbl} block mb-1`}>State Code</label>
+                                    <input type="text" value={form.stateCode} onChange={e=>setForm({...form, stateCode: e.target.value})} placeholder="33" maxLength={2} className={`${inp} w-full`}/>
                                 </div>
                                 <div>
                                     <label className={`${lbl} block mb-1`}>Pincode</label>

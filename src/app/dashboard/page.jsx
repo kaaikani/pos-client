@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, Suspense } from 'react';
-import { BarChart, BookOpen, Grid, Box, ShoppingBag, ScanLine, FileText, LogOut, Users, ShieldCheck, User, Plus, XCircle, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff, KeyRound, Package, ShoppingCart, Hash, Wallet, Receipt, Settings, ClipboardList } from 'lucide-react';
+import { BarChart, BookOpen, Grid, Box, ShoppingBag, ScanLine, FileText, LogOut, Users, ShieldCheck, User, Plus, XCircle, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff, KeyRound, Package, ShoppingCart, Hash, Wallet, Receipt, Settings, ClipboardList, Search, Bell, Calendar, Sparkles, ChevronDown, HelpCircle, Truck, TrendingUp } from 'lucide-react';
 import ItemMasterModule from './item-master-module';
 import PurchaseModule from './purchase-module';
 import PaymentModule from './payment-module';
@@ -13,7 +13,7 @@ import ProductsModule from './category-module';
 import PosModule from './pos-module';
 import BarcodeModule from './barcode-module';
 import DashboardModule from './dashboard-module';
-import ReportModule from './report-module';
+import StandardReportScreen from '../../components/reports/StandardReportScreen';
 import CustomerModule from './customer-module';
 import StockUpdationModule from './stock-updation-module';
 import PurchaseReturnModule from './purchase-return-module';
@@ -250,6 +250,11 @@ export default function VendureDashboard() {
     const [activeCompany, setActiveCompany] = useState({ name: 'AVS ECOM PRIVATE LIMITED', financialYear: '2026-2027' });
     const [enabledSections, setEnabledSections] = useState({});
 
+    // Sidebar hover-to-reveal when collapsed (auto-collapse on POS page)
+    const [sidebarHover, setSidebarHover] = useState(false);
+    // Reports submenu expanded state
+    const [reportsExpanded, setReportsExpanded] = useState(false);
+
     // Read active company + section visibility from localStorage. Re-read on window focus and storage events.
     useEffect(() => {
         const refresh = () => {
@@ -380,7 +385,7 @@ export default function VendureDashboard() {
                 case 'barcode': return isAdmin ? <BarcodeModule /> : null;
                 case 'ledger': return isAdmin ? <LedgerModule /> : null;
                 case 'customers': return isAdmin ? <CustomerModule /> : null;
-                case 'report': return isAdmin ? <ReportModule initialReport={reportSection} key={reportSection}/> : null;
+                case 'report': return isAdmin ? <StandardReportScreen reportId={reportSection} key={reportSection}/> : null;
                 case 'users': return isAdmin ? <UserManagementModule /> : null;
                 case 'settings': return isAdmin ? <SettingsModule section={settingsSection} onChangeSection={setSettingsSection}/> : null;
                 default: return null;
@@ -452,250 +457,400 @@ export default function VendureDashboard() {
     // Home/welcome screen
     const showHome = activeTab === 'home' || activeTab === null;
 
-    // ── ALL SECTIONS open in FULL-SCREEN mode (Esc to close) ──
-    const isFullScreenSection = activeTab && activeTab !== 'home' && activeTab !== null;
-    if (isFullScreenSection) {
-        const sectionTitle = (() => {
-            const m = adminMenuItems.find(m => m.id === activeTab); return m ? m.label : activeTab;
-        })();
-        return (
-            <div className="fixed inset-0 z-[100] bg-white flex flex-col">
-                {/* Slim top bar with company name + section title + Close button */}
-                <div className="h-7 flex items-center justify-between px-3 shrink-0" style={{background:'linear-gradient(90deg, #1a5276, #2980b9)'}}>
-                    <div className="flex items-center gap-2">
-                        <span className="text-white text-xs font-black tracking-[3px]">{activeCompany.name}</span>
-                        <span className="text-cyan-100 text-[10px] font-bold ml-2">— {activeCompany.financialYear}</span>
-                        <span className="text-cyan-100 text-[10px] font-bold ml-3">▸ {sectionTitle}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px]">
-                        <span className="text-cyan-100 font-bold">{session.displayName}</span>
-                        <button onClick={() => setActiveTab('home')} title="Close (back to Dashboard, or press Esc)" className="px-3 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded">✕ Close (Esc)</button>
-                    </div>
-                </div>
-                <div className="flex-1 overflow-auto bg-[#ecf0f1]">
-                    {renderContent()}
-                </div>
-            </div>
-        );
-    }
+    // ── ADMIN ROLE: Modern Sidebar Dashboard Layout ──
+    const initials = (session.displayName || session.username || 'A').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
+    const activeMenu = adminMenuItems.find(m => m.id === activeTab);
+    const sectionTitle = activeMenu ? activeMenu.label : 'Dashboard';
 
-    // ── ADMIN ROLE: Classic POS Software Layout ──
-    return (<div className="flex flex-col h-screen font-sans select-none" style={{background:'linear-gradient(135deg, #1a5276 0%, #2e86c1 30%, #85c1e9 60%, #d4e6f1 100%)'}}>
+    // Auto-collapse sidebar when POS (Sales) is open. Hover left edge to peek.
+    const isPosOpen = activeTab === 'pos';
+    const sidebarCollapsed = isPosOpen && !sidebarHover;
 
-      {/* ═══ ROW 1: Blue title bar ═══ */}
-      <div className="h-7 flex items-center justify-between px-3 shrink-0" style={{background:'linear-gradient(90deg, #1a5276, #2980b9)'}}>
-        <div className="flex items-center gap-2">
-          <span className="text-white text-xs font-black tracking-[3px]">{activeCompany.name}</span>
-          <span className="text-cyan-100 text-[10px] font-bold ml-2">— {activeCompany.financialYear}</span>
+    return (
+    <div className="flex h-screen font-sans select-none bg-slate-100 overflow-hidden relative">
+
+      {/* Invisible left-edge hover zone — wakes the sidebar when collapsed on Sales page */}
+      {isPosOpen && (
+        <div
+          onMouseEnter={() => setSidebarHover(true)}
+          className="fixed left-0 top-0 w-2 h-full z-[60]"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ═══ LEFT SIDEBAR (dark) — slides out on POS page ═══ */}
+      <aside
+        onMouseEnter={() => setSidebarHover(true)}
+        onMouseLeave={() => setSidebarHover(false)}
+        className={`shrink-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-slate-200 flex flex-col border-r border-slate-700/50 transition-all duration-300 ease-in-out overflow-hidden ${
+          sidebarCollapsed ? 'w-0 -ml-1 opacity-0' : 'w-[220px] opacity-100 shadow-xl shadow-slate-900/30'
+        } ${isPosOpen && sidebarHover ? 'fixed inset-y-0 left-0 z-50' : ''}`}>
+        {/* Brand */}
+        <div className="px-5 py-5 flex items-center gap-2.5 border-b border-slate-700/40">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+            <ShoppingBag size={18} className="text-white"/>
+          </div>
+          <div>
+            <div className="text-white font-black text-[15px] tracking-tight leading-none">AVS ECOM</div>
+            <div className="text-slate-400 text-[9px] font-bold tracking-widest uppercase mt-1">POS · {activeCompany.financialYear}</div>
+          </div>
         </div>
-        <div className="flex items-center gap-3 text-[10px]">
-          <span className="text-cyan-100 font-bold">{session.displayName}</span>
-          <span className="text-cyan-100">|</span>
-          <span className="text-cyan-100 font-bold">{new Date().toLocaleDateString('en-IN')}</span>
-        </div>
-      </div>
 
-      {/* ═══ ROW 2: Top toolbar with icon buttons ═══ */}
-      <div className="h-[68px] flex items-center px-1.5 gap-[3px] shrink-0 border-b border-[#85c1e9]" style={{background:'linear-gradient(180deg, #f0f4f8 0%, #dce6f0 100%)'}}>
-        {toolbarItems.map((item, i) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          const isSettings = item.hasDropdown;
-          const isReport = item.hasReportDropdown;
-          const isPurchase = item.hasPurchaseDropdown;
-          const isCategory = item.hasCategoryDropdown;
-          const closeAllMenus = () => { setSettingsMenuOpen(false); setReportMenuOpen(false); setPurchaseMenuOpen(false); setCategoryMenuOpen(false); };
-          return (<div key={i} className="relative">
-            <button onClick={() => {
-              if (item.id === '_logout') { handleLogout(); return; }
-              if (isSettings) { closeAllMenus(); setSettingsMenuOpen(p => !p); return; }
-              if (isReport)   { closeAllMenus(); setReportMenuOpen(p => !p); return; }
-              if (isPurchase) { closeAllMenus(); setPurchaseMenuOpen(p => !p); return; }
-              if (isCategory) { closeAllMenus(); setCategoryMenuOpen(p => !p); return; }
-              setActiveTab(item.id);
-              closeAllMenus();
-            }} className={`flex flex-col items-center justify-center rounded border transition-all min-w-[68px] h-[58px] px-1 ${isActive
-              ? 'bg-blue-100 border-blue-400 shadow-inner'
-              : 'bg-white border-[#c0c8d0] hover:bg-blue-50 hover:border-blue-300 shadow-sm'}`} style={{boxShadow: isActive ? 'inset 0 2px 4px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.1)'}}>
-              <div className="w-8 h-8 rounded flex items-center justify-center mb-0.5" style={{background:item.bg}}>
-                <Icon size={18} className="text-white"/>
-              </div>
-              <span className="text-[8px] font-bold text-[#2c3e50] leading-[10px] text-center whitespace-pre-line">{item.label}{(isSettings || isReport || isPurchase || isCategory) && ' ▾'}</span>
-            </button>
-
-            {/* Purchase dropdown menu */}
-            {isPurchase && purchaseMenuOpen && (<>
-              <div className="fixed inset-0 z-40" onClick={()=>setPurchaseMenuOpen(false)}/>
-              <div className="absolute left-0 top-full mt-0.5 w-60 bg-white border-2 border-[#1a5276] shadow-2xl z-50" style={{color:'#000'}}>
-                <div className="bg-[#1abc9c] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">🛒 Purchase</div>
-                {[
-                  { id: 'purchase',         label: 'Purchase' },
-                  { id: 'stock-updation',   label: 'Stock Updation' },
-                  { id: 'purchase-return',  label: 'Purchase Return' },
-                  { id: 'stock-adjustment', label: 'Stock Adjustment' },
-                  { id: 'inward',           label: 'Inward' },
-                  { id: 'purchase-list',    label: 'Purchase List' },
-                ].map(o => (
-                  <button key={o.id} onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveTab(o.id);
-                    setPurchaseMenuOpen(false);
-                  }} style={{color:'#000', background:'#fff'}}
-                    onMouseEnter={(e)=>{e.currentTarget.style.background='#1abc9c';e.currentTarget.style.color='#fff';}}
-                    onMouseLeave={(e)=>{e.currentTarget.style.background='#fff';e.currentTarget.style.color='#000';}}
-                    className="w-full text-left px-4 py-2 text-[12px] font-black border-b border-slate-200 last:border-0 transition block">
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </>)}
-
-            {/* Category dropdown menu */}
-            {isCategory && categoryMenuOpen && (<>
-              <div className="fixed inset-0 z-40" onClick={()=>setCategoryMenuOpen(false)}/>
-              <div className="absolute left-0 top-full mt-0.5 w-64 bg-white border-2 border-[#1a5276] shadow-2xl z-50" style={{color:'#000'}}>
-                <div className="bg-[#f39c12] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">📂 Category</div>
-                {[
-                  { id: 'tax-master',           label: 'Tax Master' },
-                  { id: 'rate-master',          label: 'Rate Master' },
-                  { id: 'size-master',          label: 'Size Master' },
-                  { id: 'brand-master',         label: 'Brand Master' },
-                  { id: 'category',             label: 'Category' },
-                  { id: 'brandwise-rate',       label: 'Brandwise Rate Update' },
-                  { id: 'categorywise-rate',    label: 'CategorywiseRate Update' },
-                  { id: 'salesman',             label: 'SalesMan' },
-                ].map(o => (
-                  <button key={o.id} onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveTab(o.id);
-                    setCategoryMenuOpen(false);
-                  }} style={{color:'#000', background:'#fff'}}
-                    onMouseEnter={(e)=>{e.currentTarget.style.background='#f39c12';e.currentTarget.style.color='#fff';}}
-                    onMouseLeave={(e)=>{e.currentTarget.style.background='#fff';e.currentTarget.style.color='#000';}}
-                    className="w-full text-left px-4 py-2 text-[12px] font-black border-b border-slate-200 last:border-0 transition block">
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </>)}
-
-            {/* Reports dropdown menu */}
-            {isReport && reportMenuOpen && (<>
-              <div className="fixed inset-0 z-40" onClick={()=>setReportMenuOpen(false)}/>
-              <div className="absolute left-0 top-full mt-0.5 w-64 bg-white border-2 border-[#1a5276] shadow-2xl z-50" style={{color:'#000'}}>
-                <div className="bg-[#1a5276] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">📊 Reports</div>
-                {[
-                  { id: 'purchase', label: 'Purchase Report', num: 1 },
-                  { id: 'sales',    label: 'Sales Report',    num: 2 },
-                  { id: 'stock',    label: 'Stock Report',    num: 3 },
-                ].map(r => (
-                  <button key={r.id} onClick={(e) => {
-                    e.stopPropagation();
-                    setReportSection(r.id);
-                    setActiveTab('report');
-                    setReportMenuOpen(false);
-                  }} style={{color:'#000', background:'#fff'}}
-                    onMouseEnter={(e)=>{e.currentTarget.style.background='#2980b9';e.currentTarget.style.color='#fff';}}
-                    onMouseLeave={(e)=>{e.currentTarget.style.background='#fff';e.currentTarget.style.color='#000';}}
-                    className="w-full text-left px-4 py-2.5 text-[13px] font-black border-b border-slate-200 last:border-0 transition flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-[#1a5276] text-white flex items-center justify-center text-[11px] font-black">{r.num}</span>
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </>)}
-
-            {/* Settings dropdown menu */}
-            {isSettings && settingsMenuOpen && (<>
-              <div className="fixed inset-0 z-40" onClick={()=>setSettingsMenuOpen(false)}/>
-              <div className="absolute left-0 top-full mt-0.5 w-60 bg-white border-2 border-[#1a5276] shadow-2xl z-50" style={{color:'#000'}}>
-                {[
-                  { id: 'configuration', label: 'Configuration' },
-                  { id: 'company', label: 'Company' },
-                  { id: 'user-creation', label: 'User Creation' },
-                  { id: 'barcode-design', label: 'Barcode Design' },
-                ].map(s => (
-                  <button key={s.id} onClick={(e) => {
-                    e.stopPropagation();
-                    setSettingsSection(s.id);
-                    setActiveTab('settings');
-                    setSettingsMenuOpen(false);
-                  }} style={{color:'#000', background:'#fff'}} onMouseEnter={(e)=>{e.currentTarget.style.background='#2980b9';e.currentTarget.style.color='#fff';}} onMouseLeave={(e)=>{e.currentTarget.style.background='#fff';e.currentTarget.style.color='#000';}}
-                  className="w-full text-left px-4 py-2.5 text-[13px] font-black border-b border-slate-200 last:border-0 transition block">
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </>)}
-          </div>);
-        })}
-      </div>
-
-      {/* ═══ ROW 3: Main area = Left sidebar + Content ═══ */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* ── LEFT SIDEBAR ── */}
-        <div className="w-[110px] flex flex-col py-1.5 px-1.5 gap-[5px] shrink-0 overflow-y-auto" style={{background:'linear-gradient(180deg, #e8eff5 0%, #d0dce8 100%)', borderRight:'2px solid #a8c4d8'}}>
-          {sidebarItems.map((item, i) => {
+        {/* Nav items */}
+        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
+          {adminMenuItems.map(item => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            return (<button key={i} onClick={() => setActiveTab(item.id)} className={`flex items-center gap-2 py-2 px-2 rounded border transition-all w-full text-left ${isActive
-              ? 'bg-blue-100 border-blue-400 shadow-inner'
-              : 'bg-white border-[#c0c8d0] hover:bg-blue-50 hover:border-blue-300 shadow-sm'}`}>
-              <div className="w-8 h-8 rounded flex items-center justify-center shrink-0" style={{background:item.bg}}>
-                <Icon size={16} className="text-white"/>
-              </div>
-              <span className="text-[9px] font-bold text-[#2c3e50] leading-[11px] whitespace-pre-line">{item.label}</span>
-            </button>);
+            const isReports = item.id === 'report';
+            const reportSubitems = [
+                { id: 'purchase', label: 'Purchase Report', icon: ShoppingCart, num: 1 },
+                { id: 'sales',    label: 'Sales Report',    icon: ShoppingBag, num: 2 },
+                { id: 'stock',    label: 'Stock Report',    icon: Box,         num: 3 },
+                { id: 'expense',  label: 'Expense Report',  icon: Wallet,      num: 4 },
+                { id: 'daybook',  label: 'Day Book',        icon: BookOpen,    num: 5 },
+            ];
+
+            if (isReports) {
+                return (
+                <div key={item.id}>
+                    <button onClick={() => setReportsExpanded(p => !p)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition group ${
+                          isActive
+                            ? 'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white border border-indigo-400/30 shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                        }`}>
+                        <Icon size={16} className={isActive ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}/>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <ChevronDown size={14} className={`transition-transform duration-200 ${reportsExpanded ? 'rotate-180' : ''} ${isActive ? 'text-indigo-300' : 'text-slate-500'}`}/>
+                    </button>
+                    {/* Smooth expand/collapse submenu */}
+                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsExpanded ? 'max-h-80 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                        <div className="ml-3 pl-3 border-l border-slate-700/50 space-y-0.5 py-1">
+                            {reportSubitems.map(sub => {
+                                const SubIcon = sub.icon;
+                                const subActive = activeTab === 'report' && reportSection === sub.id;
+                                return (
+                                    <button key={sub.id} onClick={() => { setReportSection(sub.id); setActiveTab('report'); }}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-bold transition ${
+                                          subActive
+                                            ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-400/30'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                                        }`}>
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${subActive ? 'bg-indigo-400 text-white' : 'bg-slate-700 text-slate-300'}`}>{sub.num}</span>
+                                        <SubIcon size={13} className={subActive ? 'text-indigo-300' : 'text-slate-500'}/>
+                                        <span className="flex-1 text-left">{sub.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+                );
+            }
+
+            return (
+              <button key={item.id} onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition group ${
+                  isActive
+                    ? 'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white border border-indigo-400/30 shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}>
+                <Icon size={16} className={isActive ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}/>
+                <span className="flex-1 text-left">{item.label}</span>
+                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"/>}
+              </button>
+            );
           })}
-        </div>
+        </nav>
 
-        {/* ── CENTER CONTENT ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {showHome ? (
-            /* ── Welcome / Home Screen with gradient background ── */
-            <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden" style={{background:'linear-gradient(135deg, #1a5276 0%, #2e86c1 25%, #5dade2 50%, #85c1e9 75%, #aed6f1 100%)'}}>
-              {/* Decorative wave overlay */}
-              <div className="absolute inset-0 opacity-50" style={{backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1440 320\'%3E%3Cpath fill=\'%23ffffff\' d=\'M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,149.3C672,139,768,149,864,176C960,203,1056,245,1152,245.3C1248,245,1344,203,1392,181.3L1440,160L1440,320L0,320Z\'/%3E%3C/svg%3E")', backgroundSize:'cover', backgroundPosition:'bottom'}}/>
-              <div className="relative z-10 text-center">
-                <div className="text-6xl font-black text-white mb-2 tracking-[6px] drop-shadow-lg" style={{textShadow:'2px 3px 6px rgba(0,0,0,0.3)'}}>
-                  AVS ECOM
-                </div>
-                <div className="text-white text-xl font-black tracking-[8px] uppercase mb-6" style={{textShadow:'1px 2px 4px rgba(0,0,0,0.3)'}}>
-                  Medical POS System
-                </div>
-                <div className="text-cyan-100 text-sm font-bold tracking-widest">EASY STEP — SAVE YOUR TIME</div>
-                <div className="mt-8 flex items-center gap-3">
-                  <button onClick={() => setActiveTab('pos')} className="px-6 py-2.5 bg-white/20 backdrop-blur border border-white/30 text-white rounded-lg font-bold text-sm hover:bg-white/30 transition">Start Billing</button>
-                  <button onClick={() => setActiveTab('itemmaster')} className="px-6 py-2.5 bg-white/20 backdrop-blur border border-white/30 text-white rounded-lg font-bold text-sm hover:bg-white/30 transition">Item Master</button>
-                </div>
-              </div>
+        {/* Help promo card */}
+        <div className="mx-3 mb-3 p-3 rounded-xl bg-gradient-to-br from-indigo-600/30 via-violet-600/20 to-purple-600/30 border border-indigo-400/30 backdrop-blur">
+          <div className="flex items-start gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/40 flex items-center justify-center shrink-0">
+              <HelpCircle size={16} className="text-indigo-200"/>
             </div>
-          ) : (
-            /* ── Module content ── */
-            <>
-              <div className="h-6 flex items-center justify-between px-3 shrink-0 border-b border-[#bdc3c7]" style={{background:'linear-gradient(90deg, #dce6f0, #eef2f7)'}}>
-                <span className="text-[10px] font-black text-[#2c3e50] uppercase tracking-wider flex items-center gap-1">
-                  {(() => { const m = adminMenuItems.find(m => m.id === activeTab); return m ? <><m.icon size={12}/> {m.label}</> : activeTab; })()}
-                </span>
-                <button onClick={() => setActiveTab('home')} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">✕ Close</button>
-              </div>
-              <main className="flex-1 overflow-auto p-2 bg-[#ecf0f1]">
-                {renderContent()}
-              </main>
-            </>
-          )}
+            <div className="flex-1 min-w-0">
+              <div className="text-white text-[11px] font-black">Need Help?</div>
+              <div className="text-indigo-200 text-[9px] font-medium leading-tight mt-0.5">Read docs or contact support</div>
+              <button onClick={()=>setActiveTab('settings')} className="mt-2 px-3 py-1 bg-white text-indigo-700 rounded-md text-[10px] font-black uppercase tracking-wider hover:bg-indigo-50 transition">Open</button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* ═══ BOTTOM STATUS BAR ═══ */}
-      <div className="h-[22px] flex items-center justify-between px-3 shrink-0 border-t border-[#1a5276]" style={{background:'linear-gradient(90deg, #2c3e50, #34495e)'}}>
-        <div className="flex items-center gap-2 text-[9px] text-[#34495e]">
-          <span>Ready</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"/>
+        {/* User profile footer */}
+        <div className="px-3 pb-3 pt-2 border-t border-slate-700/40">
+          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-black text-[12px] shadow-md shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-white text-[12px] font-black truncate">{session.displayName}</div>
+              <div className="text-slate-400 text-[9px] font-bold truncate">{session.role === 'admin' ? 'Administrator' : 'POS User'}</div>
+            </div>
+            <button onClick={handleLogout} title="Logout" className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-300 transition">
+              <LogOut size={14}/>
+            </button>
+          </div>
         </div>
-        <span className="text-[9px] text-[#2c3e50] font-bold">{activeCompany.name} ({activeCompany.financialYear})</span>
-        <span className="text-[9px] text-[#34495e]">{new Date().toLocaleString('en-IN', {weekday:'short', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true})}</span>
+      </aside>
+
+      {/* ═══ MAIN AREA ═══ */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Top header */}
+        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div>
+              <h1 className="text-[18px] font-black text-slate-900 tracking-tight flex items-center gap-2">
+                {activeMenu && <activeMenu.icon size={20} className="text-indigo-500"/>}
+                {sectionTitle}
+              </h1>
+              <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">{activeCompany.name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative hidden md:block">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+              <input
+                type="text"
+                placeholder="Search anything..."
+                className="w-72 h-9 pl-9 pr-3 text-[12px] font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-indigo-300 focus:ring-2 focus:ring-indigo-200 transition"
+              />
+            </div>
+            {/* Calendar */}
+            <button title="Calendar" className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition">
+              <Calendar size={15}/>
+            </button>
+            {/* Notifications */}
+            <button title="Notifications" className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition relative">
+              <Bell size={15}/>
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500"/>
+            </button>
+            {/* New Sale CTA */}
+            <button onClick={()=>setActiveTab('pos')} className="flex items-center gap-1.5 px-4 h-9 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-[12px] font-black uppercase tracking-wider shadow-lg shadow-indigo-500/30 transition active:scale-95">
+              <Plus size={14}/> New Sale
+            </button>
+          </div>
+        </header>
+
+        {/* Content area — home scrolls, modules manage their own overflow */}
+        <main className={`flex-1 bg-slate-100 ${showHome ? 'overflow-auto' : 'overflow-hidden'}`}>
+          {showHome ? <HomeDashboard session={session} setActiveTab={setActiveTab} activeCompany={activeCompany}/> : (
+            <div className="h-full overflow-auto p-4">{renderContent()}</div>
+          )}
+        </main>
+
+        {/* Bottom status bar */}
+        <div className="h-7 shrink-0 bg-white border-t border-slate-200 px-6 flex items-center justify-between text-[10px] font-bold text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/>
+            <span>Ready</span>
+          </div>
+          <span>{activeCompany.name} · {activeCompany.financialYear}</span>
+          <span>{new Date().toLocaleString('en-IN', {weekday:'short', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true})}</span>
+        </div>
       </div>
-    </div>);
+    </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────
+// MODERN HOME DASHBOARD with stat cards + quick actions
+// ────────────────────────────────────────────────────────────
+function HomeDashboard({ session, setActiveTab, activeCompany }) {
+    const [stats, setStats] = useState({ revenue: 0, sales: 0, orders: 0, customers: 0, recentSales: [], topProducts: [] });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                // Use ListSalesQuery + ListCustomersQuery via dynamic import to avoid circular deps
+                const { ListSalesQuery } = await import('../../core/queries/pharma.query');
+                const sales = await new ListSalesQuery().execute().catch(() => []);
+                if (cancelled) return;
+                const total = (sales || []).reduce((s, x) => s + (parseFloat(x.grandTotal) || 0), 0);
+                const recent = (sales || []).slice(0, 5);
+
+                // Aggregate top products by qty from itemsJson
+                const productMap = {};
+                for (const sale of (sales || [])) {
+                    let items = [];
+                    try { items = JSON.parse(sale.itemsJson || '[]'); } catch {}
+                    for (const it of items) {
+                        const name = it.name || it.itemName || 'Unknown';
+                        const qty = parseFloat(it.qty) || 0;
+                        const revenue = qty * (parseFloat(it.rate) || 0);
+                        if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 };
+                        productMap[name].qty += qty;
+                        productMap[name].revenue += revenue;
+                    }
+                }
+                const topProducts = Object.values(productMap).sort((a,b) => b.revenue - a.revenue).slice(0, 5);
+
+                setStats({
+                    revenue: total,
+                    sales: (sales || []).length,
+                    orders: (sales || []).length,
+                    customers: new Set((sales || []).map(s => s.customerPhone).filter(Boolean)).size,
+                    recentSales: recent,
+                    topProducts,
+                });
+                setLoading(false);
+            } catch (err) {
+                setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const fmt = v => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v || 0);
+
+    const statCards = [
+        { label: 'Total Revenue', value: fmt(stats.revenue), trend: '+12.5%', trendUp: true, color: 'indigo', icon: TrendingUp },
+        { label: 'Total Sales', value: stats.sales.toLocaleString('en-IN'), trend: '+8.3%', trendUp: true, color: 'emerald', icon: ShoppingBag },
+        { label: 'Total Orders', value: stats.orders.toLocaleString('en-IN'), trend: '+15.2%', trendUp: true, color: 'amber', icon: ClipboardList },
+        { label: 'Total Customers', value: stats.customers.toLocaleString('en-IN'), trend: '+11.5%', trendUp: true, color: 'rose', icon: Users },
+    ];
+
+    const quickActions = [
+        { id: 'pos', label: 'New Sale', icon: ShoppingBag, color: 'from-emerald-500 to-teal-600' },
+        { id: 'purchase', label: 'New Purchase', icon: ShoppingCart, color: 'from-blue-500 to-indigo-600' },
+        { id: 'itemmaster', label: 'Item Master', icon: Package, color: 'from-amber-500 to-orange-600' },
+        { id: 'customers', label: 'Customers', icon: Users, color: 'from-rose-500 to-pink-600' },
+        { id: 'inventory', label: 'Inventory', icon: Box, color: 'from-violet-500 to-purple-600' },
+        { id: 'report', label: 'Reports', icon: FileText, color: 'from-cyan-500 to-blue-600' },
+    ];
+
+    return (
+        <div className="p-6 space-y-6">
+            {/* Welcome banner */}
+            <div className="rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
+                <div className="absolute -right-8 -top-8 w-48 h-48 rounded-full bg-white/10 blur-3xl"/>
+                <div className="absolute -right-4 -bottom-12 w-64 h-64 rounded-full bg-violet-300/10 blur-3xl"/>
+                <div className="relative flex items-start justify-between gap-4">
+                    <div>
+                        <h2 className="text-2xl font-black tracking-tight">Welcome back, {(session.displayName || 'Admin').split(' ')[0]} 👋</h2>
+                        <p className="text-indigo-200 text-[12px] font-bold mt-1.5">Here's what's happening with {activeCompany.name} today.</p>
+                        <button onClick={()=>setActiveTab('pos')} className="mt-4 px-5 py-2.5 bg-white text-indigo-700 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-indigo-50 transition shadow-lg active:scale-95">
+                            <span className="flex items-center gap-2"><Sparkles size={14}/> Start a New Sale</span>
+                        </button>
+                    </div>
+                    <div className="hidden md:block">
+                        <div className="text-right">
+                            <div className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest">Today</div>
+                            <div className="text-white text-[20px] font-black">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {statCards.map((c, i) => {
+                    const colorMap = {
+                        indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-600',  ring: 'ring-indigo-100',  badge: 'bg-indigo-100 text-indigo-700' },
+                        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', ring: 'ring-emerald-100', badge: 'bg-emerald-100 text-emerald-700' },
+                        amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   ring: 'ring-amber-100',   badge: 'bg-amber-100 text-amber-700' },
+                        rose:    { bg: 'bg-rose-50',    text: 'text-rose-600',    ring: 'ring-rose-100',    badge: 'bg-rose-100 text-rose-700' },
+                    }[c.color];
+                    const Icon = c.icon;
+                    return (
+                        <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition group">
+                            <div className="flex items-start justify-between">
+                                <div className={`w-11 h-11 rounded-xl ${colorMap.bg} flex items-center justify-center ring-4 ${colorMap.ring}`}>
+                                    <Icon size={18} className={colorMap.text}/>
+                                </div>
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-full ${colorMap.badge}`}>{c.trend}</span>
+                            </div>
+                            <div className="mt-4">
+                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">{c.label}</div>
+                                <div className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{c.value}</div>
+                                <div className="text-[10px] font-bold text-slate-400 mt-1">vs last month</div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Quick actions */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="text-[14px] font-black text-slate-900 mb-4 flex items-center gap-2">
+                    <Sparkles size={16} className="text-indigo-500"/> Quick Actions
+                </h3>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                    {quickActions.map(a => {
+                        const Icon = a.icon;
+                        return (
+                            <button key={a.id} onClick={()=>setActiveTab(a.id)} className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md transition">
+                                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${a.color} flex items-center justify-center shadow-md group-hover:scale-110 transition`}>
+                                    <Icon size={18} className="text-white"/>
+                                </div>
+                                <span className="text-[11px] font-black text-slate-700">{a.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Two-column: Recent Sales + Top Products */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Recent Sales */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2"><Receipt size={16} className="text-emerald-500"/> Recent Sales</h3>
+                        <button onClick={()=>setActiveTab('report')} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-wider">View All</button>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {loading ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">Loading...</div>
+                          : stats.recentSales.length === 0 ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">No sales yet</div>
+                          : stats.recentSales.map((s, i) => (
+                            <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center text-emerald-700 font-black text-[12px]">
+                                        {(s.customerName || 'W').slice(0,1).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <div className="text-[12px] font-black text-slate-900">{s.customerName || 'Walk-in'}</div>
+                                        <div className="text-[10px] font-bold text-slate-500">Bill {s.billNo} · {s.billDate}</div>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-[13px] font-black text-slate-900">{fmt(s.grandTotal)}</div>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${s.saleType==='CREDIT'?'bg-orange-100 text-orange-700':'bg-emerald-100 text-emerald-700'}`}>{s.saleType || 'CASH'}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Top Products */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2"><Package size={16} className="text-amber-500"/> Top Products</h3>
+                        <button onClick={()=>setActiveTab('itemmaster')} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-wider">View All</button>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {loading ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">Loading...</div>
+                          : stats.topProducts.length === 0 ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">No data yet</div>
+                          : stats.topProducts.map((p, i) => (
+                            <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center text-amber-700 font-black text-[11px]">
+                                        {i + 1}
+                                    </div>
+                                    <div>
+                                        <div className="text-[12px] font-black text-slate-900 truncate max-w-[220px]">{p.name}</div>
+                                        <div className="text-[10px] font-bold text-slate-500">{p.qty} sold</div>
+                                    </div>
+                                </div>
+                                <div className="text-[13px] font-black text-slate-900">{fmt(p.revenue)}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
