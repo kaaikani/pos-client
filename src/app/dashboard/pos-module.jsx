@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { LookupBarcodeQuery } from '../../core/queries/PosQueries';
-import { CreateLedgerCommand } from '../../core/queries/ledger.query';
 import { ListItemsQuery, CreateSaleCommand, ListSalesQuery, DeleteSaleCommand, PosTaxMastersQuery } from '../../core/queries/pharma.query';
 import { invalidateCache } from '../../core/queries/cache';
 import { gql } from '../../core/queries/gql';
@@ -105,6 +104,11 @@ export default function PosModule() {
 
     // Keyboard navigation
     const [focusedRow, setFocusedRow] = useState(-1); // cart row index under arrow focus
+
+    // Credit sales whose customer-ledger (receivable) entry failed to save.
+    // The sale itself is already committed on the server at that point, so the
+    // failure CANNOT be silent — an unrecorded receivable is money the shop
+    // will never chase. Each entry stays on screen until dismissed.
 
     // Last Bills viewer (recent finalized bills from localStorage)
     const [showLastBills, setShowLastBills] = useState(false);
@@ -431,28 +435,35 @@ export default function PosModule() {
     // Confirm payment — applies split amounts and saves
     const confirmCheckout = async () => {
         if (splitTotal <= 0) return alert('Enter at least one payment amount.');
+        // Amounts are captured here and passed straight into handleSave. We must NOT
+        // rely on setPayCredit() then read payCredit inside handleSave — setState is
+        // async, so handleSave would see the stale (0) value and silently drop the credit.
+        let creditOverride = payCredit;
         if (Math.abs(splitBalance) > 0.01 && (parseFloat(payCredit) || 0) === 0) {
             if (splitBalance > 0) {
                 if (!confirm(`Balance ₹${splitBalance.toFixed(2)} unpaid. Save remaining as Credit (customer ledger)?`)) return;
-                setPayCredit(String(splitBalance.toFixed(2)));
+                creditOverride = String(splitBalance.toFixed(2));
+                setPayCredit(creditOverride); // keep the UI in sync; the save uses the override below
             } else {
                 if (!confirm(`Received ₹${(-splitBalance).toFixed(2)} extra. Confirm save (extra returned as change)?`)) return;
             }
         }
         setShowCheckout(false);
-        setTimeout(() => handleSave(), 50);
+        const payment = { payCash, payUpi, payCard, payCredit: creditOverride };
+        setTimeout(() => handleSave(payment), 50);
     };
 
-    const handleSave = async () => {
+    const handleSave = async (paymentOverride = null) => {
         const validRows = rows.filter(r => r.itemName && parseFloat(r.qty) > 0);
         if (validRows.length === 0) return alert('Add at least one item.');
 
         // Credit mode → customer name, phone & address are mandatory (we need to track who owes us)
-        // Split-payment amounts (from Checkout panel). Falls back to single-mode legacy values.
-        const cashA = parseFloat(payCash) || 0;
-        const upiA = parseFloat(payUpi) || 0;
-        const cardA = parseFloat(payCard) || 0;
-        const creditA = parseFloat(payCredit) || 0;
+        // Split-payment amounts: prefer the explicit values passed from confirmCheckout
+        // (avoids a stale-closure read of payCredit); fall back to current state otherwise.
+        const cashA = parseFloat(paymentOverride?.payCash ?? payCash) || 0;
+        const upiA = parseFloat(paymentOverride?.payUpi ?? payUpi) || 0;
+        const cardA = parseFloat(paymentOverride?.payCard ?? payCard) || 0;
+        const creditA = parseFloat(paymentOverride?.payCredit ?? payCredit) || 0;
         const totalReceived = cashA + upiA + cardA;
         const isCredit = creditA > 0 || (totalReceived === 0 && String(mode).toUpperCase() === 'CREDIT');
 
@@ -514,21 +525,12 @@ export default function PosModule() {
             };
             saveToReport(legacyPayload);
 
-            // For CREDIT sales → create customer ledger entry
-            if (creditA > 0 && customerName) {
-                try {
-                    await new CreateLedgerCommand().execute({
-                        type: 'CUSTOMER',
-                        partyName: customerName,
-                        invoiceNumber: String(billNo),
-                        invoiceDate: new Date().toISOString(),
-                        amount: Math.round(creditA),
-                        creditDays: 30,
-                        contactNumber: customerPhone || '',
-                        address: customerAddress || '',
-                    });
-                } catch (err) { console.warn('Ledger entry failed:', err.message); }
-            }
+            // The receivable for a credit bill is now raised by the SERVER, inside
+            // createSale's own transaction. This used to be a second call from
+            // here, made after the sale had already committed — so a network drop
+            // or a closed tab left a bill with no receivable, and the operator saw
+            // a success message either way. The sale and the receivable now
+            // succeed or fail together, and there is nothing left to do here.
 
             setLastOrder(legacyPayload);
             setShowToast(true); setTimeout(() => setShowToast(false), 5000);
@@ -1181,6 +1183,7 @@ export default function PosModule() {
             .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
             .no-spin { -moz-appearance: textfield; }
         `}</style>
+
 
         {/* Shared unit suggestions for cart Unit cell */}
         <datalist id="unit-options">

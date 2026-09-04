@@ -1,0 +1,346 @@
+/**
+ * POS design tokens — the single source of truth for the dashboard's look.
+ *
+ * PALETTE: Slate. The reference greys ARE the interface — #2D3748, #4A5568,
+ * #718096, #A0AEC0 — top to bottom, in both themes. Dark mode is slate, not
+ * near-black: #171E29 ground, #2D3748 cards. A near-black ground swallowed the
+ * cards and made every page read as empty.
+ *
+ * THREE RULES that were broken and must not be again:
+ *   1. Text colour is NEVER an opacity. Every text token is solid.
+ *   2. In dark mode SURFACE IS LIGHTER THAN CANVAS, so cards lift off the page.
+ *   3. THE ACCENT IS FOR ONE THING PER SCREEN. It appears on the single primary
+ *      button and the focus ring. NOT on the active nav item, NOT on chart
+ *      series, NOT on icons, headings, counts, badges, bill numbers or names.
+ *      Selection and active state are carried by a SLATE fill, not by orange.
+ *
+ * Chart series are their own scale (blue / green) — a data line is not a brand
+ * moment, and it is not a status either.
+ *
+ * Density is tuned for data entry at 1366x768 — the standard POS monitor.
+ */
+
+:root {
+  /* ── Surfaces ─────────────────────────────────────────── */
+  --pos-canvas:      #F7FAFC;   /* page ground behind cards */
+  --pos-surface:     #FFFFFF;   /* cards, tables, sidebar */
+  --pos-sunk:        #EDF2F7;   /* table headers, toolbars, read-only fields */
+  --pos-hover:       #EDF2F7;
+
+  /* ── Lines ────────────────────────────────────────────── */
+  --pos-line:        #E2E8F0;   /* card + table borders */
+  --pos-line-soft:   #EDF2F7;   /* row separators */
+  --pos-line-hover:  #CBD5E0;   /* control border on hover */
+
+  /* ── Text — solid values, never opacity ───────────────── */
+  --pos-ink:         #2D3748;   /* primary     11.6:1 on white  AAA */
+  --pos-ink-2:       #4A5568;   /* secondary    7.5:1 on white  AAA */
+  --pos-ink-3:       #718096;   /* tertiary     4.7:1 on white  AA  */
+  --pos-muted:       #A0AEC0;   /* decorative only — never text     */
+
+  /* ── Sidebar — light in light mode, which removes the contrast problem
+        entirely rather than trying to tune faint text on a dark ground. ── */
+  --pos-nav:         #FFFFFF;
+  --pos-nav-sunk:    #F7FAFC;
+  --pos-nav-line:    #E2E8F0;
+  --pos-nav-ink:     #4A5568;
+  --pos-nav-ink-2:   #718096;   /* group headers */
+  --pos-nav-active:  #1A202C;   /* text of the current screen */
+  --pos-nav-active-bg: #E2E8F0; /* slate fill — the accent is NOT used here */
+  --pos-nav-rail:    #4A5568;   /* the current-screen marker */
+
+  /* ── Selection — same slate logic, used by tables and choice groups ── */
+  --pos-select:      #E2E8F0;
+  --pos-select-line: #CBD5E0;
+
+  /* ── Chart series — a data scale of its own ───────────── */
+  --pos-chart-1:     #3182CE;   /* sales  */
+  --pos-chart-2:     #2F855A;   /* profit */
+  --pos-chart-grid:  #E2E8F0;
+
+  /* ── Brand — the ONE action accent ────────────────────── */
+  --pos-accent:      #DD6B20;   /* focus ring, brand mark               */
+  --pos-accent-solid:#C05621;   /* primary button — white on it 4.9:1   */
+  --pos-accent-ink:  #9C4221;   /* hover on the solid                   */
+  --pos-accent-soft: #FFFAF0;   /* faint tint, rarely used              */
+  --pos-accent-line: #FBD38D;
+
+  /* Logo gradient — the logo lockup and the sign-in panel ONLY. Never on an
+     ordinary button: a gradient control reads as decoration, not affordance. */
+  --pos-brand-from:  #F7941D;
+  --pos-brand-to:    #EE3A24;
+  --pos-brand-ink:   #1A202C;
+
+  /* ── Semantic — data state only, never branding ───────── */
+  --pos-ok:          #276749;   --pos-ok-soft:     #E6FFFA;
+  --pos-warn:        #975A16;   --pos-warn-soft:   #FEFCBF;
+  --pos-danger:      #9B2C2C;   --pos-danger-soft: #FFF5F5;  --pos-danger-line: #FEB2B2;
+  --pos-info:        #2C5282;   --pos-info-soft:   #EBF8FF;
+
+  /* Ground of the field being typed into */
+  --pos-field-focus: #FFFFFF;
+
+  /* ── Type ─────────────────────────────────────────────── */
+  --pos-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pos-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Radius / elevation — borders carry structure, not shadows ─ */
+  --pos-r-sm: 6px;
+  --pos-r:    6px;
+  --pos-r-lg: 8px;
+  --pos-shadow:    0 1px 2px rgba(45, 55, 72, .04);
+  --pos-shadow-lg: 0 4px 6px -2px rgba(45, 55, 72, .06), 0 12px 28px -8px rgba(45, 55, 72, .16);
+
+  /* ── Control geometry — one height everywhere ─────────── */
+  --pos-h:      34px;   /* inputs, selects, buttons */
+  --pos-h-sm:   28px;   /* grid cells */
+  --pos-row:    38px;   /* table row */
+}
+
+/* ══════════════════════════════════════════════════════════
+   DARK — the same slate scale, inverted.
+   Three states, not two: an explicit choice stamps data-theme on the root, and
+   the default "system" setting stamps nothing — there only prefers-color-scheme
+   separates light from dark. Both blocks redefine ONLY tokens, so every
+   component follows and no colour is ever defined solely inside a dark block.
+   ══════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pos-canvas:      #171E29;
+    --pos-surface:     #2D3748;
+    --pos-sunk:        #252E3D;
+    --pos-hover:       #3A4658;
+
+    --pos-line:        #4A5568;
+    --pos-line-soft:   #3C4757;
+    --pos-line-hover:  #718096;
+
+    --pos-ink:         #F7FAFC;
+    --pos-ink-2:       #CBD5E0;
+    --pos-ink-3:       #A0AEC0;
+    --pos-muted:       #718096;
+
+    --pos-nav:         #1A202C;
+    --pos-nav-sunk:    #242C3A;
+    --pos-nav-line:    #2D3748;
+    --pos-nav-ink:     #CBD5E0;
+    --pos-nav-ink-2:   #A0AEC0;
+    --pos-nav-active:  #FFFFFF;
+    --pos-nav-active-bg: #2D3748;
+    --pos-nav-rail:    #A0AEC0;
+
+    --pos-select:      #3A4658;
+    --pos-select-line: #718096;
+
+    --pos-chart-1:     #63B3ED;
+    --pos-chart-2:     #68D391;
+    --pos-chart-grid:  #3C4757;
+
+    --pos-accent:      #ED8936;
+    --pos-accent-solid:#C05621;
+    --pos-accent-ink:  #DD6B20;
+    --pos-accent-soft: #2C2620;
+    --pos-accent-line: #7B4622;
+
+    --pos-brand-from:  #F7941D;
+    --pos-brand-to:    #EE3A24;
+    --pos-brand-ink:   #F7FAFC;
+
+    --pos-ok:          #68D391;   --pos-ok-soft:     #22402F;
+    --pos-warn:        #F6E05E;   --pos-warn-soft:   #3E3A20;
+    --pos-danger:      #FC8181;   --pos-danger-soft: #402327;  --pos-danger-line: #63363C;
+    --pos-info:        #90CDF4;   --pos-info-soft:   #22344D;
+
+    --pos-field-focus: #333E4F;
+
+    --pos-shadow:    0 1px 2px rgba(0, 0, 0, .32);
+    --pos-shadow-lg: 0 4px 6px -2px rgba(0, 0, 0, .42), 0 14px 32px -10px rgba(0, 0, 0, .66);
+  }
+}
+
+:root[data-theme="dark"] {
+  --pos-canvas:      #171E29;
+  --pos-surface:     #2D3748;
+  --pos-sunk:        #252E3D;
+  --pos-hover:       #3A4658;
+
+  --pos-line:        #4A5568;
+  --pos-line-soft:   #3C4757;
+  --pos-line-hover:  #718096;
+
+  --pos-ink:         #F7FAFC;
+  --pos-ink-2:       #CBD5E0;
+  --pos-ink-3:       #A0AEC0;
+  --pos-muted:       #718096;
+
+  --pos-nav:         #1A202C;
+  --pos-nav-sunk:    #242C3A;
+  --pos-nav-line:    #2D3748;
+  --pos-nav-ink:     #CBD5E0;
+  --pos-nav-ink-2:   #A0AEC0;
+  --pos-nav-active:  #FFFFFF;
+  --pos-nav-active-bg: #2D3748;
+  --pos-nav-rail:    #A0AEC0;
+
+  --pos-select:      #3A4658;
+  --pos-select-line: #718096;
+
+  --pos-chart-1:     #63B3ED;
+  --pos-chart-2:     #68D391;
+  --pos-chart-grid:  #3C4757;
+
+  --pos-accent:      #ED8936;
+  --pos-accent-solid:#C05621;
+  --pos-accent-ink:  #DD6B20;
+  --pos-accent-soft: #2C2620;
+  --pos-accent-line: #7B4622;
+
+  --pos-brand-from:  #F7941D;
+  --pos-brand-to:    #EE3A24;
+  --pos-brand-ink:   #F7FAFC;
+
+  --pos-ok:          #68D391;   --pos-ok-soft:     #22402F;
+  --pos-warn:        #F6E05E;   --pos-warn-soft:   #3E3A20;
+  --pos-danger:      #FC8181;   --pos-danger-soft: #402327;  --pos-danger-line: #63363C;
+  --pos-info:        #90CDF4;   --pos-info-soft:   #22344D;
+
+  --pos-field-focus: #333E4F;
+
+  --pos-shadow:    0 1px 2px rgba(0, 0, 0, .32);
+  --pos-shadow-lg: 0 4px 6px -2px rgba(0, 0, 0, .42), 0 14px 32px -10px rgba(0, 0, 0, .66);
+}
+
+/* ── Focus: always visible, never removed. The one place besides the primary
+      button where the accent is allowed, because focus must not be mistaken
+      for any other state. ─────────────────────────────────── */
+.pos-focusable:focus-visible,
+.pos-input:focus-visible,
+.pos-btn:focus-visible {
+  outline: 2px solid var(--pos-accent);
+  outline-offset: 1px;
+}
+
+/* ── Inputs ──────────────────────────────────────────────── */
+.pos-input {
+  height: var(--pos-h);
+  width: 100%;
+  padding: 0 10px;
+  font-family: var(--pos-font);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--pos-ink);
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-line);
+  border-radius: var(--pos-r);
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.pos-input::placeholder { color: var(--pos-ink-3); }
+.pos-input:hover:not(:disabled) { border-color: var(--pos-line-hover); }
+.pos-input:focus {
+  border-color: var(--pos-ink-3);
+  box-shadow: 0 0 0 3px var(--pos-select);
+  background: var(--pos-field-focus);
+}
+.pos-input:disabled,
+.pos-input[readonly] { background: var(--pos-sunk); color: var(--pos-ink-2); cursor: not-allowed; }
+.pos-input.is-invalid { border-color: var(--pos-danger); box-shadow: 0 0 0 3px var(--pos-danger-soft); }
+.pos-input--num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Spinners are useless with a keyboard workflow */
+.pos-input[type=number]::-webkit-outer-spin-button,
+.pos-input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pos-input[type=number] { -moz-appearance: textfield; }
+
+select.pos-input {
+  appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+textarea.pos-input { height: auto; padding: 8px 10px; line-height: 1.5; resize: vertical; }
+
+/* ── Buttons — only ONE primary per screen ───────────────── */
+.pos-btn {
+  height: var(--pos-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-family: var(--pos-font);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--pos-r);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.pos-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.pos-btn--primary { background: var(--pos-accent-solid); color: #fff; }
+.pos-btn--primary:hover:not(:disabled) { background: var(--pos-accent-ink); }
+
+.pos-btn--default { background: var(--pos-surface); color: var(--pos-ink); border-color: var(--pos-line); }
+.pos-btn--default:hover:not(:disabled) { background: var(--pos-sunk); border-color: var(--pos-line-hover); }
+
+.pos-btn--danger { background: var(--pos-surface); color: var(--pos-danger); border-color: var(--pos-danger-line); }
+.pos-btn--danger:hover:not(:disabled) { background: var(--pos-danger-soft); }
+
+.pos-btn--ghost { background: transparent; color: var(--pos-ink-2); }
+.pos-btn--ghost:hover:not(:disabled) { background: var(--pos-sunk); color: var(--pos-ink); }
+
+.pos-btn--sm { height: var(--pos-h-sm); padding: 0 10px; font-size: 12px; }
+
+/* ── Tables ──────────────────────────────────────────────── */
+.pos-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pos-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  height: 34px;
+  padding: 0 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--pos-ink-3);
+  background: var(--pos-sunk);
+  border-bottom: 1px solid var(--pos-line);
+  white-space: nowrap;
+  user-select: none;
+}
+.pos-table tbody td {
+  height: var(--pos-row);
+  padding: 0 14px;
+  color: var(--pos-ink-2);
+  border-bottom: 1px solid var(--pos-line-soft);
+  vertical-align: middle;
+}
+.pos-table tbody tr:hover td { background: var(--pos-hover); }
+.pos-table tbody tr[data-selected="true"] td { background: var(--pos-select); }
+/* A record's own name is ink, never accent — the ROW is what is clickable. */
+.pos-table tbody td strong,
+.pos-table tbody td b { color: var(--pos-ink); font-weight: 600; }
+.pos-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--pos-ink); }
+.pos-table .code { font-family: var(--pos-mono); font-size: 12px; color: var(--pos-ink-3); }
+.pos-table tfoot td {
+  height: 38px; padding: 0 14px;
+  background: var(--pos-sunk);
+  border-top: 1px solid var(--pos-line);
+  color: var(--pos-ink);
+  font-weight: 600;
+}
+
+/* ── Scrollbars — thin, unobtrusive ──────────────────────── */
+.pos-scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--pos-line-hover) transparent; }
+.pos-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.pos-scroll::-webkit-scrollbar-thumb { background: var(--pos-line-hover); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+.pos-scroll::-webkit-scrollbar-thumb:hover { background: var(--pos-ink-3); background-clip: content-box; }
+.pos-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-input, .pos-btn { transition: none; }
+}

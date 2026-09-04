@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "../components/pos/tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -116,111 +117,41 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  /**
+   * Text colour comes from the design tokens and is INHERITED.
+   *
+   * What used to be here: a blanket rule painting every p/span/div/label/td/
+   * button #000000, plus ~90 lines of exceptions keyed to hardcoded Tailwind
+   * class names (bg-slate-9, bg-[#2c3e50], text-blue-700 …) trying to undo it
+   * on dark backgrounds. Any component whose colour comes from a CSS variable
+   * — that is, the entire pos design system — matched no exception and got
+   * black text. In dark mode that was black on #1A202C: the sidebar labels,
+   * table cells and card text were invisible. That is the bug it caused, and
+   * it is why retuning the tokens appeared to change nothing.
+   *
+   * Set the colour once, here, and let it cascade. Components that need a
+   * different weight of ink use --pos-ink-2 / --pos-ink-3 explicitly.
+   */
   body {
     @apply bg-background;
-    color: #000000 !important;     /* Black text everywhere by default */
+    background: var(--pos-canvas);
+    color: var(--pos-ink);
   }
 
-  /* ═══ GLOBAL RULE: All text is BLACK by default ═══ */
-  p, span, div, label, td, th, li, a, button, h1, h2, h3, h4, h5, h6,
-  strong, em, small, code, pre, figure, figcaption, caption {
-    color: #000000;
+  /* Legacy screens still use bare inputs with no .pos-input class. Give them
+     the token colours so they follow the theme instead of being pinned to
+     black-on-white. .pos-input sets its own and is unaffected. */
+  input:not(.pos-input),
+  textarea:not(.pos-input),
+  select:not(.pos-input) {
+    color: var(--pos-ink);
+    caret-color: var(--pos-ink);
   }
 
-  /* ═══ EXCEPTIONS: Elements on dark backgrounds keep white/light text ═══ */
-
-  /* Dark background classes — children stay white */
-  [class*="bg-slate-7"],
-  [class*="bg-slate-8"],
-  [class*="bg-slate-9"],
-  [class*="bg-gray-7"],
-  [class*="bg-gray-8"],
-  [class*="bg-gray-9"],
-  [class*="bg-zinc-7"],
-  [class*="bg-zinc-8"],
-  [class*="bg-zinc-9"],
-  [class*="bg-neutral-7"],
-  [class*="bg-neutral-8"],
-  [class*="bg-neutral-9"],
-  [class*="bg-black"],
-  .bg-\[\#1a5276\], .bg-\[\#2c3e50\], .bg-\[\#34495e\], .bg-\[\#2980b9\],
-  .bg-\[\#0f3460\], .bg-\[\#16213e\], .bg-\[\#1a1a2e\], .bg-\[\#154360\],
-  .bg-\[\#1a2530\], .bg-\[\#3498db\], .bg-\[\#3aa8b0\],
-  [class*="from-slate-9"], [class*="from-slate-8"],
-  [class*="from-\[\#1a5276\]"], [class*="from-\[\#2c3e50\]"],
-  [class*="from-\[\#0f3460\]"], [class*="from-\[\#16213e\]"] {
-    color: #ffffff;
-  }
-  [class*="bg-slate-7"] *, [class*="bg-slate-8"] *, [class*="bg-slate-9"] *,
-  [class*="bg-gray-7"] *, [class*="bg-gray-8"] *, [class*="bg-gray-9"] *,
-  [class*="bg-zinc-7"] *, [class*="bg-zinc-8"] *, [class*="bg-zinc-9"] *,
-  [class*="bg-black"] *,
-  .bg-\[\#1a5276\] *, .bg-\[\#2c3e50\] *, .bg-\[\#34495e\] *, .bg-\[\#2980b9\] *,
-  .bg-\[\#0f3460\] *, .bg-\[\#16213e\] *, .bg-\[\#1a1a2e\] *, .bg-\[\#154360\] *,
-  .bg-\[\#1a2530\] *, .bg-\[\#3498db\] *, .bg-\[\#3aa8b0\] * {
-    color: #ffffff;
-  }
-
-  /* Elements that explicitly set their own color override everything */
-  [class*="text-white"], [class*="text-white"] * { color: #ffffff !important; }
-  [class*="text-red"]:not([class*="text-red-0"]):not([class*="text-red-1"]):not([class*="text-red-2"]) { color: inherit; }
-
-  /* Color utilities that should win over the default black */
-  .text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-red-900,
-  .text-\[\#c0392b\], .text-\[\#e74c3c\] { color: #dc2626 !important; }
-  .text-emerald-500, .text-emerald-600, .text-emerald-700, .text-emerald-800, .text-emerald-900 { color: #059669 !important; }
-  .text-blue-500, .text-blue-600, .text-blue-700, .text-blue-800, .text-blue-900,
-  .text-\[\#2980b9\], .text-\[\#1a5276\], .text-\[\#0f3460\], .text-\[\#1a1a7e\] { color: #1d4ed8 !important; }
-  .text-teal-400, .text-teal-500, .text-teal-600, .text-teal-700,
-  .text-\[\#16a085\] { color: #0d9488 !important; }
-  .text-amber-400, .text-amber-500, .text-amber-600, .text-amber-700 { color: #d97706 !important; }
-  .text-yellow-400, .text-yellow-500, .text-yellow-600 { color: #eab308 !important; }
-  .text-cyan-200, .text-cyan-300, .text-cyan-400 { color: #67e8f9 !important; }
-  .text-purple-400, .text-purple-500, .text-purple-600, .text-purple-700 { color: #9333ea !important; }
-
-  /* Form inputs/textareas/selects — BLACK text on WHITE bg */
-  input[type="text"],
-  input[type="number"],
-  input[type="tel"],
-  input[type="email"],
-  input[type="password"],
-  input[type="date"],
-  input[type="time"],
-  input[type="month"],
-  input[type="search"],
-  input[type="url"],
-  input:not([type]),
-  textarea,
-  select {
-    color: #000000 !important;
-    background-color: #ffffff;
-    caret-color: #000000;
-  }
-
-  input::placeholder, textarea::placeholder {
-    color: #6b7280 !important;
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--pos-ink-3);
     opacity: 1;
-  }
-
-  /* Dark-themed inputs keep white text */
-  input.bg-slate-700, input.bg-slate-800, input.bg-slate-900,
-  input.bg-\[\#0f3460\], input.bg-\[\#16213e\], input.bg-\[\#1a1a2e\],
-  textarea.bg-slate-700, textarea.bg-slate-800, textarea.bg-slate-900 {
-    color: #ffffff !important;
-    caret-color: #ffffff;
-  }
-  input.bg-slate-700::placeholder, input.bg-slate-800::placeholder, input.bg-slate-900::placeholder,
-  input.bg-\[\#0f3460\]::placeholder, input.bg-\[\#16213e\]::placeholder, input.bg-\[\#1a1a2e\]::placeholder {
-    color: #94a3b8 !important;
-  }
-
-  /* ═══ Dropdowns, popups, modals on white bg — force black text ═══ */
-  .bg-white, .bg-white *:not([class*="bg-slate-7"]):not([class*="bg-slate-8"]):not([class*="bg-slate-9"]):not([class*="bg-blue-6"]):not([class*="bg-blue-7"]):not([class*="bg-\[\#2980b9\]"]):not([class*="bg-\[\#1a5276\]"]):not([class*="bg-\[\#2c3e50\]"]):not([class*="bg-\[\#3498db\]"]):not([class*="bg-emerald-6"]):not([class*="bg-emerald-7"]):not([class*="bg-red-6"]):not([class*="bg-red-7"]):not([class*="bg-amber-5"]):not([class*="bg-amber-6"]):not([class*="bg-orange-5"]):not([class*="bg-orange-6"]) {
-    color: #000000;
-  }
-
-  /* Force black on any .bg-white button */
-  button.bg-white, button[class*="bg-white"] {
-    color: #000000 !important;
   }
 }

@@ -14,40 +14,9 @@ function useLocalList(key) {
     return [list, persist];
 }
 
-// ══════════════════════════════════════════════
-// 1. TAX MASTER (red)
-// ══════════════════════════════════════════════
-export function TaxMasterModule() {
-    const [list, set] = useLocalList('master_tax');
-    const [form, setForm] = useState({ name: '', percent: '', hsn: '', isInterstate: false });
-    const [editId, setEditId] = useState(null);
-    const save = () => {
-        if (!form.name.trim() || !form.percent) return alert('Name + Percent required.');
-        if (editId) { set(list.map(x => x.id === editId ? { ...x, ...form, percent: parseFloat(form.percent) } : x)); setEditId(null); }
-        else { set([{ id: 'TAX-' + Date.now(), ...form, percent: parseFloat(form.percent), createdAt: new Date().toISOString() }, ...list]); }
-        setForm({ name: '', percent: '', hsn: '', isInterstate: false });
-    };
-    const edit = (x) => { setEditId(x.id); setForm({ name: x.name, percent: x.percent, hsn: x.hsn || '', isInterstate: !!x.isInterstate }); };
-    const del = (id) => { if (confirm('Delete this tax rate?')) set(list.filter(x => x.id !== id)); };
-    return (<MasterShell color="red" icon={Percent} title="Tax Master" subtitle="Manage GST / VAT / CGST / SGST tax rates"
-        leftForm={(<>
-            <FormField color="red" label="Tax Name *" value={form.name} onChange={v=>setForm({...form, name: v})} placeholder="e.g. GST 18%"/>
-            <FormField color="red" label="Percent (%) *" type="number" value={form.percent} onChange={v=>setForm({...form, percent: v})} placeholder="18"/>
-            <FormField color="red" label="HSN Code" value={form.hsn} onChange={v=>setForm({...form, hsn: v})} placeholder="optional"/>
-            <label className="flex items-center gap-2 text-xs font-black text-red-900 cursor-pointer"><input type="checkbox" checked={form.isInterstate} onChange={e=>setForm({...form, isInterstate: e.target.checked})}/> Inter-state (IGST)</label>
-            <SaveBtn color="red" onSave={save} editId={editId} onCancel={()=>{setEditId(null);setForm({name:'',percent:'',hsn:'',isInterstate:false});}}/>
-        </>)}
-        list={(<table className="w-full text-sm"><thead className="bg-red-50"><tr>
-            <Th>Name</Th><Th align="right">%</Th><Th>HSN</Th><Th>Type</Th><Th></Th>
-        </tr></thead><tbody>{list.map(x => (<tr key={x.id} className="border-b border-red-100 hover:bg-red-50/30">
-            <td className="px-3 py-1.5 font-black text-slate-900">{x.name}</td>
-            <td className="px-3 py-1.5 text-right font-black text-red-700">{x.percent}%</td>
-            <td className="px-3 py-1.5 font-bold text-slate-700">{x.hsn || '—'}</td>
-            <td className="px-3 py-1.5"><span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${x.isInterstate ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>{x.isInterstate ? 'IGST' : 'CGST/SGST'}</span></td>
-            <td className="px-3 py-1.5 text-right"><RowActions onEdit={()=>edit(x)} onDelete={()=>del(x.id)}/></td>
-        </tr>))}{!list.length && <Empty colspan={5} text="No tax rates configured."/>}</tbody></table>)}
-    />);
-}
+// TAX MASTER moved to ./tax-master-module.jsx — it is server-backed now.
+// The version that lived here saved to localStorage, so the rates existed in
+// one browser only and vanished with the cache.
 
 // ══════════════════════════════════════════════
 // 2. RATE MASTER (blue)

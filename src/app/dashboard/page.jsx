@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, Suspense } from 'react';
-import { BarChart, BookOpen, Grid, Box, ShoppingBag, ScanLine, FileText, LogOut, Users, ShieldCheck, User, Plus, XCircle, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff, KeyRound, Package, ShoppingCart, Hash, Wallet, Receipt, Settings, ClipboardList, Search, Bell, Calendar, Sparkles, ChevronDown, HelpCircle, Truck, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { BarChart, BookOpen, Grid, Box, ShoppingBag, ScanLine, FileText, LogOut, Users, ShieldCheck, User, Plus, XCircle, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff, KeyRound, Package, ShoppingCart, Hash, Wallet, Receipt, Settings, ClipboardList, Search, Bell, Calendar, ChevronDown, HelpCircle, Truck, Sliders, Undo2 } from 'lucide-react';
 import ItemMasterModule from './item-master-module';
 import PurchaseModule from './purchase-module';
 import PaymentModule from './payment-module';
@@ -20,8 +20,79 @@ import PurchaseReturnModule from './purchase-return-module';
 import StockAdjustmentModule from './stock-adjustment-module';
 import InwardModule from './inward-module';
 import PurchaseListModule from './purchase-list-module';
-import { TaxMasterModule, RateMasterModule, SizeMasterModule, BrandMasterModule, BrandwiseRateUpdateModule, CategorywiseRateUpdateModule, SalesManModule } from './master-modules';
+import { RateMasterModule, SizeMasterModule, BrandMasterModule, BrandwiseRateUpdateModule, CategorywiseRateUpdateModule, SalesManModule } from './master-modules';
+import TaxMasterModule from './tax-master-module';
 import { PosListUsersQuery, PosCreateUserCommand, PosUpdateUserCommand, PosDeleteUserCommand } from '../../core/queries/auth.query';
+import { canOpenScreen, roleLabel } from '../../components/pos/permissions';
+import QuickCreate from '../../components/pos/quick-create';
+import Sidebar from '../../components/pos/sidebar';
+import AccountPanel from '../../components/pos/account-panel';
+import TopBar from '../../components/pos/topbar';
+import { BusinessProfileProvider } from '../../components/pos/profile';
+import '../../components/pos/tokens.css';
+
+/**
+ * Reached when the screen id in the URL matches no screen — a stale bookmark, a
+ * renamed route, or a typed ?s= value. This used to render null, so the whole
+ * body went blank with no error anywhere: the page looked broken, not wrong.
+ */
+function UnknownScreen({ screen, onHome }) {
+    return (
+        <div className="flex flex-col items-center justify-center h-[70vh] gap-3 text-center px-6">
+            <div className="text-[15px] font-semibold" style={{ color: 'var(--pos-ink)' }}>
+                Screen not found
+            </div>
+            <div className="text-[13px] max-w-[380px]" style={{ color: 'var(--pos-ink-3)' }}>
+                There is no screen called <span style={{ fontFamily: 'var(--pos-mono)' }}>{screen || '—'}</span>.
+                The link may be out of date.
+            </div>
+            <button type="button" onClick={onHome} className="pos-btn pos-btn--default mt-1">
+                Go to Dashboard
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Auto-collapse the sidebar when the window cannot hold it plus a usable top bar.
+ *
+ * The sidebar held a fixed 228px at every width, so on a narrow window the top bar
+ * ran out of room and the primary action, theme toggle, notifications and user menu
+ * were pushed off screen entirely. Below 1180px the nav drops to icons, which frees
+ * 166px — enough for the whole bar. An explicit collapse by the operator still wins.
+ */
+function useAutoCollapse(manual) {
+    const [narrow, setNarrow] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 1180px)');
+        const apply = () => setNarrow(mq.matches);
+        apply();
+        mq.addEventListener('change', apply);
+        return () => mq.removeEventListener('change', apply);
+    }, []);
+    return narrow || manual;
+}
+
+/**
+ * Shown when the signed-in role lacks the permission for a screen. A blank panel
+ * reads as a bug; this says what happened and who can change it.
+ */
+function NoAccess({ screen }) {
+    return (
+        <div className="h-full grid place-items-center bg-white border border-slate-200 rounded-xl">
+            <div className="text-center px-6 py-14 max-w-[420px]">
+                <div className="mx-auto grid place-items-center w-11 h-11 rounded-full bg-slate-100 text-slate-400 mb-3">
+                    <ShieldCheck size={20}/>
+                </div>
+                <p className="text-[14px] font-semibold text-slate-800">You do not have access to this screen</p>
+                <p className="text-[12.5px] text-slate-500 mt-1.5">
+                    Your role does not include the permission required for <b>{screen}</b>.
+                    An administrator can grant it in Settings &rarr; Roles.
+                </p>
+            </div>
+        </div>
+    );
+}
 
 // ── User Management Module ──
 function UserManagementModule() {
@@ -241,6 +312,7 @@ export default function VendureDashboard() {
     const [session, setSession] = useState(null);
     const [checking, setChecking] = useState(true);
     const [activeTab, setActiveTab] = useState(null);
+    const activeTabRef = useRef(null);
     const [settingsSection, setSettingsSection] = useState('configuration');
     const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
     const [reportSection, setReportSection] = useState('purchase');
@@ -254,6 +326,9 @@ export default function VendureDashboard() {
     const [sidebarHover, setSidebarHover] = useState(false);
     // Reports submenu expanded state
     const [reportsExpanded, setReportsExpanded] = useState(false);
+    const [accountOpen, setAccountOpen] = useState(false);
+    const [navCollapsed, setNavCollapsed] = useState(false);
+    const autoCollapsed = useAutoCollapse(navCollapsed);
 
     // Read active company + section visibility from localStorage. Re-read on window focus and storage events.
     useEffect(() => {
@@ -289,7 +364,7 @@ export default function VendureDashboard() {
     useEffect(() => {
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
-            if (!activeTab || activeTab === 'home') return;
+            if (!activeTab) return;
             // If any visible modal/popup is on screen, let it handle Esc first (don't close section).
             // We detect this by looking for elements with z-[200] / z-[210] (our modal layers) or role="dialog".
             const hasOpenModal = !!document.querySelector('[role="dialog"], .fixed.z-\\[200\\], .fixed.z-\\[210\\], .fixed.inset-0.bg-black\\/60, .fixed.inset-0.bg-slate-900\\/50, .fixed.inset-0.bg-slate-900\\/60, .fixed.inset-0.bg-black\\/70');
@@ -298,7 +373,7 @@ export default function VendureDashboard() {
             if (document.activeElement && typeof document.activeElement.blur === 'function') {
                 document.activeElement.blur();
             }
-            setActiveTab('home');
+            setActiveTab('dashboard');
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
@@ -319,34 +394,102 @@ export default function VendureDashboard() {
             }
             setSession(s);
             // Set default tab based on role
-            setActiveTab(s.role === 'admin' ? 'home' : 'pos');
+            // Land on the real Dashboard module. The old inline 'home' screen was a
+            // second, duplicate dashboard and has been removed. A cashier whose role
+            // cannot open the dashboard goes straight to the billing counter.
+            const startPerms = Array.isArray(s.permissions) && s.permissions.length
+                ? s.permissions
+                : (s.role === 'admin' ? ['SuperAdmin'] : ['CreateOrder']);
+            const landing = canOpenScreen(startPerms, 'dashboard') ? 'dashboard' : 'pos';
+            // Restore the screen from the URL so a reload — and a back/forward —
+            // returns to where the operator was, not to the landing screen.
+            const fromUrl = new URLSearchParams(window.location.search).get('s');
+            const start = fromUrl && canOpenScreen(startPerms, fromUrl) ? fromUrl : landing;
+            setActiveTab(start);
+            window.history.replaceState({ tab: start }, '', '/dashboard?s=' + start);
             setChecking(false);
         } catch {
             window.location.href = '/login';
         }
     }, []);
 
+    /**
+     * Change screen AND record it in browser history.
+     *
+     * The dashboard is one route with the screen held in React state, so Back had
+     * nothing to return to inside the app and landed on whatever preceded
+     * /dashboard. Every screen change now pushes an entry, and `popstate` puts it
+     * back — so Back walks the screens the operator actually visited.
+     */
+    const navigate = React.useCallback((tab) => {
+        if (typeof window === 'undefined') return;
+        // The comparison reads a ref, not state, so this stays a stable callback
+        // without the push living inside a setState updater. React runs updaters
+        // during render, and Next patches history.pushState to sync its Router —
+        // pushing in there updated Router mid-render ("Cannot update a component
+        // (`Router`) while rendering a different component") and double-pushed
+        // under StrictMode, which put a phantom entry in the Back stack.
+        if (activeTabRef.current === tab) return;
+        activeTabRef.current = tab;
+        window.history.pushState({ tab }, '', '/dashboard?s=' + tab);
+        setActiveTab(tab);
+    }, []);
+
+    // Mirrors activeTab so navigate() can compare without depending on it. Every
+    // path that changes the screen — popstate, the auth guard, Escape — flows
+    // through here, so the ref never drifts from what is on screen.
+    useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+    useEffect(() => {
+        const onPop = (e) => {
+            const tab = e.state?.tab || new URLSearchParams(window.location.search).get('s');
+            if (tab) setActiveTab(tab);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
+
+    /**
+     * Sign out.
+     *
+     * `replace` rather than `href`, so the dashboard is not left as the previous
+     * history entry — pressing Back after signing out must not re-enter the app.
+     * Older dashboard entries further back are harmless: with the session gone the
+     * screen bounces straight to /login on mount.
+     */
     const handleLogout = () => {
-        localStorage.removeItem('pos_session');
-        window.location.href = '/login';
+        try {
+            localStorage.removeItem('pos_session');
+            sessionStorage.clear();
+        } catch { /* private mode */ }
+        window.location.replace('/login');
     };
 
     if (checking || !session) {
         return <div className="flex items-center justify-center h-screen bg-slate-100 text-slate-700 font-bold">Loading...</div>;
     }
 
-    const isAdmin = session.role === 'admin';
+    // Access is decided by the Vendure permissions on the session, not by a
+    // single admin flag. A session saved before RBAC existed falls back to the
+    // coarse role inside readSession()/canOpenScreen so nobody is locked out.
+    const perms = Array.isArray(session.permissions) && session.permissions.length
+        ? session.permissions
+        : (session.role === 'admin' ? ['SuperAdmin'] : ['CreateOrder', 'ReadCatalog', 'ReadCustomer']);
+    const can = (screenId) => canOpenScreen(perms, screenId);
+    const isAdmin = can('settings') || can('users');
 
     // Menu items based on role
     const adminMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: BarChart },
         { id: 'token', label: 'Token Entry', icon: Hash },
-        { id: 'itemmaster', label: 'Item Master', icon: Package },
+        { id: 'itemmaster', label: 'Item', icon: Package },
         { id: 'purchase', label: 'Purchase', icon: ShoppingCart },
         { id: 'payment', label: 'Payment', icon: Wallet },
         { id: 'receipt', label: 'Receipt', icon: Receipt },
         { id: 'pos', label: 'Sales', icon: ShoppingBag },
         { id: 'inventory', label: 'Stock / Inventory', icon: Box },
+        { id: 'stock-adjustment', label: 'Stock Adjustment', icon: Sliders },
+        { id: 'purchase-return', label: 'Purchase Return', icon: Undo2 },
         { id: 'category', label: 'Products (Vendure)', icon: Grid },
         { id: 'barcode', label: 'Barcode', icon: ScanLine },
         { id: 'ledger', label: 'Ledger', icon: BookOpen },
@@ -356,42 +499,49 @@ export default function VendureDashboard() {
         { id: 'settings', label: 'Settings', icon: Settings },
     ];
 
-    const menuItems = isAdmin ? adminMenuItems : [];
+    const menuItems = adminMenuItems.filter(m => can(m.id));
 
     const renderContent = () => {
         const content = (() => {
             switch (activeTab) {
-                case 'dashboard': return isAdmin ? <DashboardModule /> : null;
-                case 'token': return isAdmin ? <TokenEntryModule /> : null;
-                case 'itemmaster': return isAdmin ? <ItemMasterModule /> : null;
-                case 'purchase': return isAdmin ? <PurchaseModule /> : null;
-                case 'stock-updation': return isAdmin ? <StockUpdationModule /> : null;
-                case 'purchase-return': return isAdmin ? <PurchaseReturnModule /> : null;
-                case 'stock-adjustment': return isAdmin ? <StockAdjustmentModule /> : null;
-                case 'inward': return isAdmin ? <InwardModule /> : null;
-                case 'purchase-list': return isAdmin ? <PurchaseListModule /> : null;
-                case 'tax-master': return isAdmin ? <TaxMasterModule /> : null;
-                case 'rate-master': return isAdmin ? <RateMasterModule /> : null;
-                case 'size-master': return isAdmin ? <SizeMasterModule /> : null;
-                case 'brand-master': return isAdmin ? <BrandMasterModule /> : null;
-                case 'brandwise-rate': return isAdmin ? <BrandwiseRateUpdateModule /> : null;
-                case 'categorywise-rate': return isAdmin ? <CategorywiseRateUpdateModule /> : null;
-                case 'salesman': return isAdmin ? <SalesManModule /> : null;
-                case 'payment': return isAdmin ? <PaymentModule /> : null;
-                case 'receipt': return isAdmin ? <ReceiptModule /> : null;
+                case 'dashboard': return can('dashboard') ? <DashboardModule setActiveTab={navigate} /> : <NoAccess screen="dashboard" />;
+                case 'token': return can('token') ? <TokenEntryModule /> : <NoAccess screen="token" />;
+                case 'itemmaster': return can('itemmaster') ? <ItemMasterModule /> : <NoAccess screen="itemmaster" />;
+                case 'purchase': return can('purchase') ? <PurchaseModule /> : <NoAccess screen="purchase" />;
+                case 'stock-updation': return can('stock-updation') ? <StockUpdationModule /> : <NoAccess screen="stock-updation" />;
+                case 'purchase-return': return can('purchase-return') ? <PurchaseReturnModule /> : <NoAccess screen="purchase-return" />;
+                case 'stock-adjustment': return can('stock-adjustment') ? <StockAdjustmentModule /> : <NoAccess screen="stock-adjustment" />;
+                case 'inward': return can('inward') ? <InwardModule /> : <NoAccess screen="inward" />;
+                case 'purchase-list': return can('purchase-list') ? <PurchaseListModule /> : <NoAccess screen="purchase-list" />;
+                case 'tax-master': return can('tax-master') ? <TaxMasterModule /> : <NoAccess screen="tax-master" />;
+                case 'rate-master': return can('rate-master') ? <RateMasterModule /> : <NoAccess screen="rate-master" />;
+                case 'size-master': return can('size-master') ? <SizeMasterModule /> : <NoAccess screen="size-master" />;
+                case 'brand-master': return can('brand-master') ? <BrandMasterModule /> : <NoAccess screen="brand-master" />;
+                case 'brandwise-rate': return can('brandwise-rate') ? <BrandwiseRateUpdateModule /> : <NoAccess screen="brandwise-rate" />;
+                case 'categorywise-rate': return can('categorywise-rate') ? <CategorywiseRateUpdateModule /> : <NoAccess screen="categorywise-rate" />;
+                case 'salesman': return can('salesman') ? <SalesManModule /> : <NoAccess screen="salesman" />;
+                case 'payment': return can('payment') ? <PaymentModule /> : <NoAccess screen="payment" />;
+                case 'receipt': return can('receipt') ? <ReceiptModule /> : <NoAccess screen="receipt" />;
                 case 'pos': return <PosModule />;
-                case 'inventory': return isAdmin ? <InventoryModule /> : null;
-                case 'category': return isAdmin ? <ProductsModule /> : null;
-                case 'barcode': return isAdmin ? <BarcodeModule /> : null;
-                case 'ledger': return isAdmin ? <LedgerModule /> : null;
-                case 'customers': return isAdmin ? <CustomerModule /> : null;
-                case 'report': return isAdmin ? <StandardReportScreen reportId={reportSection} key={reportSection}/> : null;
-                case 'users': return isAdmin ? <UserManagementModule /> : null;
-                case 'settings': return isAdmin ? <SettingsModule section={settingsSection} onChangeSection={setSettingsSection}/> : null;
-                default: return null;
+                case 'inventory': return can('inventory') ? <InventoryModule /> : <NoAccess screen="inventory" />;
+                case 'category': return can('category') ? <ProductsModule /> : <NoAccess screen="category" />;
+                case 'barcode': return can('barcode') ? <BarcodeModule /> : <NoAccess screen="barcode" />;
+                case 'ledger': return can('ledger') ? <LedgerModule setActiveTab={navigate} /> : <NoAccess screen="ledger" />;
+                case 'customers': return can('customers') ? <CustomerModule /> : <NoAccess screen="customers" />;
+                case 'report': return can('report') ? <StandardReportScreen reportId={reportSection} key={reportSection}/> : <NoAccess screen="report" />;
+                case 'users': return can('users') ? <UserManagementModule /> : <NoAccess screen="users" />;
+                case 'settings': return can('settings') ? <SettingsModule section={settingsSection} onChangeSection={setSettingsSection}/> : <NoAccess screen="settings" />;
+                default: return <UnknownScreen screen={activeTab} onHome={() => navigate('dashboard')} />;
             }
         })();
-        return <Suspense fallback={<div className="flex items-center justify-center h-[80vh] text-slate-700">Loading...</div>}>{content}</Suspense>;
+        return (
+            <Suspense fallback={
+                <div className="flex items-center justify-center h-[80vh] text-[13px]"
+                     style={{ color: 'var(--pos-ink-3)' }}>
+                    Loading...
+                </div>
+            }>{content}</Suspense>
+        );
     };
 
     // ── USER ROLE: POS Only (no sidebar) ──
@@ -444,7 +594,7 @@ export default function VendureDashboard() {
     // ── Left sidebar buttons — filtered by Configuration toggles ──
     const allSidebarItems = [
         { id: 'token', label: 'Token Entry', icon: Hash, bg: '#e67e22', cfg: 'Show Token Entry' },
-        { id: 'itemmaster', label: 'Item Master', icon: Package, bg: '#3498db', cfg: 'Show Item Master' },
+        { id: 'itemmaster', label: 'Item', icon: Package, bg: '#3498db', cfg: 'Show Item Master' },
         { id: 'purchase', label: 'Purchase', icon: ShoppingCart, bg: '#1abc9c', cfg: 'Show Purchase' },
         { id: 'pos', label: 'Sales', icon: ShoppingBag, bg: '#2ecc71', cfg: 'Show Sales' },
         { id: 'payment', label: 'Payment', icon: Wallet, bg: '#27ae60', cfg: 'Show Payment' },
@@ -455,7 +605,7 @@ export default function VendureDashboard() {
     const sidebarItems = allSidebarItems.filter(it => !it.cfg || isSectionEnabled(it.cfg));
 
     // Home/welcome screen
-    const showHome = activeTab === 'home' || activeTab === null;
+
 
     // ── ADMIN ROLE: Modern Sidebar Dashboard Layout ──
     const initials = (session.displayName || session.username || 'A').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
@@ -478,167 +628,42 @@ export default function VendureDashboard() {
         />
       )}
 
-      {/* ═══ LEFT SIDEBAR (dark) — slides out on POS page ═══ */}
-      <aside
-        onMouseEnter={() => setSidebarHover(true)}
-        onMouseLeave={() => setSidebarHover(false)}
-        className={`shrink-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-slate-200 flex flex-col border-r border-slate-700/50 transition-all duration-300 ease-in-out overflow-hidden ${
-          sidebarCollapsed ? 'w-0 -ml-1 opacity-0' : 'w-[220px] opacity-100 shadow-xl shadow-slate-900/30'
-        } ${isPosOpen && sidebarHover ? 'fixed inset-y-0 left-0 z-50' : ''}`}>
-        {/* Brand */}
-        <div className="px-5 py-5 flex items-center gap-2.5 border-b border-slate-700/40">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <ShoppingBag size={18} className="text-white"/>
-          </div>
-          <div>
-            <div className="text-white font-black text-[15px] tracking-tight leading-none">AVS ECOM</div>
-            <div className="text-slate-400 text-[9px] font-bold tracking-widest uppercase mt-1">POS · {activeCompany.financialYear}</div>
-          </div>
-        </div>
-
-        {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
-          {adminMenuItems.map(item => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            const isReports = item.id === 'report';
-            const reportSubitems = [
-                { id: 'purchase', label: 'Purchase Report', icon: ShoppingCart, num: 1 },
-                { id: 'sales',    label: 'Sales Report',    icon: ShoppingBag, num: 2 },
-                { id: 'stock',    label: 'Stock Report',    icon: Box,         num: 3 },
-                { id: 'expense',  label: 'Expense Report',  icon: Wallet,      num: 4 },
-                { id: 'daybook',  label: 'Day Book',        icon: BookOpen,    num: 5 },
-            ];
-
-            if (isReports) {
-                return (
-                <div key={item.id}>
-                    <button onClick={() => setReportsExpanded(p => !p)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition group ${
-                          isActive
-                            ? 'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white border border-indigo-400/30 shadow-md'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-                        }`}>
-                        <Icon size={16} className={isActive ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}/>
-                        <span className="flex-1 text-left">{item.label}</span>
-                        <ChevronDown size={14} className={`transition-transform duration-200 ${reportsExpanded ? 'rotate-180' : ''} ${isActive ? 'text-indigo-300' : 'text-slate-500'}`}/>
-                    </button>
-                    {/* Smooth expand/collapse submenu */}
-                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsExpanded ? 'max-h-80 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
-                        <div className="ml-3 pl-3 border-l border-slate-700/50 space-y-0.5 py-1">
-                            {reportSubitems.map(sub => {
-                                const SubIcon = sub.icon;
-                                const subActive = activeTab === 'report' && reportSection === sub.id;
-                                return (
-                                    <button key={sub.id} onClick={() => { setReportSection(sub.id); setActiveTab('report'); }}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-bold transition ${
-                                          subActive
-                                            ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-400/30'
-                                            : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-                                        }`}>
-                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${subActive ? 'bg-indigo-400 text-white' : 'bg-slate-700 text-slate-300'}`}>{sub.num}</span>
-                                        <SubIcon size={13} className={subActive ? 'text-indigo-300' : 'text-slate-500'}/>
-                                        <span className="flex-1 text-left">{sub.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-                );
-            }
-
-            return (
-              <button key={item.id} onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-bold transition group ${
-                  isActive
-                    ? 'bg-gradient-to-r from-indigo-500/20 to-violet-500/10 text-white border border-indigo-400/30 shadow-md'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-                }`}>
-                <Icon size={16} className={isActive ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}/>
-                <span className="flex-1 text-left">{item.label}</span>
-                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"/>}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Help promo card */}
-        <div className="mx-3 mb-3 p-3 rounded-xl bg-gradient-to-br from-indigo-600/30 via-violet-600/20 to-purple-600/30 border border-indigo-400/30 backdrop-blur">
-          <div className="flex items-start gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/40 flex items-center justify-center shrink-0">
-              <HelpCircle size={16} className="text-indigo-200"/>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-[11px] font-black">Need Help?</div>
-              <div className="text-indigo-200 text-[9px] font-medium leading-tight mt-0.5">Read docs or contact support</div>
-              <button onClick={()=>setActiveTab('settings')} className="mt-2 px-3 py-1 bg-white text-indigo-700 rounded-md text-[10px] font-black uppercase tracking-wider hover:bg-indigo-50 transition">Open</button>
-            </div>
-          </div>
-        </div>
-
-        {/* User profile footer */}
-        <div className="px-3 pb-3 pt-2 border-t border-slate-700/40">
-          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-black text-[12px] shadow-md shrink-0">
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-[12px] font-black truncate">{session.displayName}</div>
-              <div className="text-slate-400 text-[9px] font-bold truncate">{session.role === 'admin' ? 'Administrator' : 'POS User'}</div>
-            </div>
-            <button onClick={handleLogout} title="Logout" className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-300 transition">
-              <LogOut size={14}/>
-            </button>
-          </div>
-        </div>
-      </aside>
+      {/* ═══ LEFT SIDEBAR ═══
+          Grouped navigation lives in components/pos/sidebar.jsx. It used to be a
+          flat list with a different gradient per item, which is what made the app
+          look like a toy. On the billing screen it collapses to give the counter
+          the full width. */}
+      <Sidebar
+        activeTab={activeTab}
+        onNavigate={navigate}
+        permissions={perms}
+        session={session}
+        financialYear={activeCompany.financialYear}
+        collapsed={autoCollapsed || sidebarCollapsed}
+        onToggleCollapse={() => setNavCollapsed(v => !v)}
+        onLogout={handleLogout}
+        onOpenProfile={() => setAccountOpen(true)}
+      />
 
       {/* ═══ MAIN AREA ═══ */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Top header */}
-        <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <div>
-              <h1 className="text-[18px] font-black text-slate-900 tracking-tight flex items-center gap-2">
-                {activeMenu && <activeMenu.icon size={20} className="text-indigo-500"/>}
-                {sectionTitle}
-              </h1>
-              <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">{activeCompany.name}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Search */}
-            <div className="relative hidden md:block">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-              <input
-                type="text"
-                placeholder="Search anything..."
-                className="w-72 h-9 pl-9 pr-3 text-[12px] font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-indigo-300 focus:ring-2 focus:ring-indigo-200 transition"
-              />
-            </div>
-            {/* Calendar */}
-            <button title="Calendar" className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition">
-              <Calendar size={15}/>
-            </button>
-            {/* Notifications */}
-            <button title="Notifications" className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition relative">
-              <Bell size={15}/>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500"/>
-            </button>
-            {/* New Sale CTA */}
-            <button onClick={()=>setActiveTab('pos')} className="flex items-center gap-1.5 px-4 h-9 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-[12px] font-black uppercase tracking-wider shadow-lg shadow-indigo-500/30 transition active:scale-95">
-              <Plus size={14}/> New Sale
-            </button>
-          </div>
-        </header>
+        {/* Top bar — business profile, outlet, search, primary action, user.
+            The profile decides what every other screen means, so it comes first. */}
+        <TopBar
+          session={session}
+          activeCompany={activeCompany}
+          outlets={[]}
+          onLogout={handleLogout}
+          onOpenProfile={() => setAccountOpen(true)}
+          onPrimaryAction={() => navigate('pos')}
+          onNavigate={navigate}
+          quickCreate={<QuickCreate permissions={perms} onNavigate={navigate} />}
+        />
 
-        {/* Content area — home scrolls, modules manage their own overflow */}
-        <main className={`flex-1 bg-slate-100 ${showHome ? 'overflow-auto' : 'overflow-hidden'}`}>
-          {showHome ? <HomeDashboard session={session} setActiveTab={setActiveTab} activeCompany={activeCompany}/> : (
-            <div className="h-full overflow-auto p-4">{renderContent()}</div>
-          )}
+        {/* Content area — each module owns its own scrolling */}
+        <main className="flex-1 overflow-hidden" style={{ background: 'var(--pos-canvas)' }}>
+          <div className="h-full overflow-hidden">{renderContent()}</div>
         </main>
 
         {/* Bottom status bar */}
@@ -651,206 +676,10 @@ export default function VendureDashboard() {
           <span>{new Date().toLocaleString('en-IN', {weekday:'short', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true})}</span>
         </div>
       </div>
+
+      {/* Own profile and password. Opened from the sidebar footer — until now there
+          was nowhere in the app for a user to change their own password. */}
+      {accountOpen && <AccountPanel session={session} onClose={() => setAccountOpen(false)} />}
     </div>
     );
-}
-
-// ────────────────────────────────────────────────────────────
-// MODERN HOME DASHBOARD with stat cards + quick actions
-// ────────────────────────────────────────────────────────────
-function HomeDashboard({ session, setActiveTab, activeCompany }) {
-    const [stats, setStats] = useState({ revenue: 0, sales: 0, orders: 0, customers: 0, recentSales: [], topProducts: [] });
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                // Use ListSalesQuery + ListCustomersQuery via dynamic import to avoid circular deps
-                const { ListSalesQuery } = await import('../../core/queries/pharma.query');
-                const sales = await new ListSalesQuery().execute().catch(() => []);
-                if (cancelled) return;
-                const total = (sales || []).reduce((s, x) => s + (parseFloat(x.grandTotal) || 0), 0);
-                const recent = (sales || []).slice(0, 5);
-
-                // Aggregate top products by qty from itemsJson
-                const productMap = {};
-                for (const sale of (sales || [])) {
-                    let items = [];
-                    try { items = JSON.parse(sale.itemsJson || '[]'); } catch {}
-                    for (const it of items) {
-                        const name = it.name || it.itemName || 'Unknown';
-                        const qty = parseFloat(it.qty) || 0;
-                        const revenue = qty * (parseFloat(it.rate) || 0);
-                        if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 };
-                        productMap[name].qty += qty;
-                        productMap[name].revenue += revenue;
-                    }
-                }
-                const topProducts = Object.values(productMap).sort((a,b) => b.revenue - a.revenue).slice(0, 5);
-
-                setStats({
-                    revenue: total,
-                    sales: (sales || []).length,
-                    orders: (sales || []).length,
-                    customers: new Set((sales || []).map(s => s.customerPhone).filter(Boolean)).size,
-                    recentSales: recent,
-                    topProducts,
-                });
-                setLoading(false);
-            } catch (err) {
-                setLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, []);
-
-    const fmt = v => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v || 0);
-
-    const statCards = [
-        { label: 'Total Revenue', value: fmt(stats.revenue), trend: '+12.5%', trendUp: true, color: 'indigo', icon: TrendingUp },
-        { label: 'Total Sales', value: stats.sales.toLocaleString('en-IN'), trend: '+8.3%', trendUp: true, color: 'emerald', icon: ShoppingBag },
-        { label: 'Total Orders', value: stats.orders.toLocaleString('en-IN'), trend: '+15.2%', trendUp: true, color: 'amber', icon: ClipboardList },
-        { label: 'Total Customers', value: stats.customers.toLocaleString('en-IN'), trend: '+11.5%', trendUp: true, color: 'rose', icon: Users },
-    ];
-
-    const quickActions = [
-        { id: 'pos', label: 'New Sale', icon: ShoppingBag, color: 'from-emerald-500 to-teal-600' },
-        { id: 'purchase', label: 'New Purchase', icon: ShoppingCart, color: 'from-blue-500 to-indigo-600' },
-        { id: 'itemmaster', label: 'Item Master', icon: Package, color: 'from-amber-500 to-orange-600' },
-        { id: 'customers', label: 'Customers', icon: Users, color: 'from-rose-500 to-pink-600' },
-        { id: 'inventory', label: 'Inventory', icon: Box, color: 'from-violet-500 to-purple-600' },
-        { id: 'report', label: 'Reports', icon: FileText, color: 'from-cyan-500 to-blue-600' },
-    ];
-
-    return (
-        <div className="p-6 space-y-6">
-            {/* Welcome banner */}
-            <div className="rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
-                <div className="absolute -right-8 -top-8 w-48 h-48 rounded-full bg-white/10 blur-3xl"/>
-                <div className="absolute -right-4 -bottom-12 w-64 h-64 rounded-full bg-violet-300/10 blur-3xl"/>
-                <div className="relative flex items-start justify-between gap-4">
-                    <div>
-                        <h2 className="text-2xl font-black tracking-tight">Welcome back, {(session.displayName || 'Admin').split(' ')[0]} 👋</h2>
-                        <p className="text-indigo-200 text-[12px] font-bold mt-1.5">Here's what's happening with {activeCompany.name} today.</p>
-                        <button onClick={()=>setActiveTab('pos')} className="mt-4 px-5 py-2.5 bg-white text-indigo-700 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-indigo-50 transition shadow-lg active:scale-95">
-                            <span className="flex items-center gap-2"><Sparkles size={14}/> Start a New Sale</span>
-                        </button>
-                    </div>
-                    <div className="hidden md:block">
-                        <div className="text-right">
-                            <div className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest">Today</div>
-                            <div className="text-white text-[20px] font-black">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {statCards.map((c, i) => {
-                    const colorMap = {
-                        indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-600',  ring: 'ring-indigo-100',  badge: 'bg-indigo-100 text-indigo-700' },
-                        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', ring: 'ring-emerald-100', badge: 'bg-emerald-100 text-emerald-700' },
-                        amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   ring: 'ring-amber-100',   badge: 'bg-amber-100 text-amber-700' },
-                        rose:    { bg: 'bg-rose-50',    text: 'text-rose-600',    ring: 'ring-rose-100',    badge: 'bg-rose-100 text-rose-700' },
-                    }[c.color];
-                    const Icon = c.icon;
-                    return (
-                        <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition group">
-                            <div className="flex items-start justify-between">
-                                <div className={`w-11 h-11 rounded-xl ${colorMap.bg} flex items-center justify-center ring-4 ${colorMap.ring}`}>
-                                    <Icon size={18} className={colorMap.text}/>
-                                </div>
-                                <span className={`text-[10px] font-black px-2 py-1 rounded-full ${colorMap.badge}`}>{c.trend}</span>
-                            </div>
-                            <div className="mt-4">
-                                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">{c.label}</div>
-                                <div className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{c.value}</div>
-                                <div className="text-[10px] font-bold text-slate-400 mt-1">vs last month</div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Quick actions */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="text-[14px] font-black text-slate-900 mb-4 flex items-center gap-2">
-                    <Sparkles size={16} className="text-indigo-500"/> Quick Actions
-                </h3>
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                    {quickActions.map(a => {
-                        const Icon = a.icon;
-                        return (
-                            <button key={a.id} onClick={()=>setActiveTab(a.id)} className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md transition">
-                                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${a.color} flex items-center justify-center shadow-md group-hover:scale-110 transition`}>
-                                    <Icon size={18} className="text-white"/>
-                                </div>
-                                <span className="text-[11px] font-black text-slate-700">{a.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Two-column: Recent Sales + Top Products */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Recent Sales */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2"><Receipt size={16} className="text-emerald-500"/> Recent Sales</h3>
-                        <button onClick={()=>setActiveTab('report')} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-wider">View All</button>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {loading ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">Loading...</div>
-                          : stats.recentSales.length === 0 ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">No sales yet</div>
-                          : stats.recentSales.map((s, i) => (
-                            <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center text-emerald-700 font-black text-[12px]">
-                                        {(s.customerName || 'W').slice(0,1).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <div className="text-[12px] font-black text-slate-900">{s.customerName || 'Walk-in'}</div>
-                                        <div className="text-[10px] font-bold text-slate-500">Bill {s.billNo} · {s.billDate}</div>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-[13px] font-black text-slate-900">{fmt(s.grandTotal)}</div>
-                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${s.saleType==='CREDIT'?'bg-orange-100 text-orange-700':'bg-emerald-100 text-emerald-700'}`}>{s.saleType || 'CASH'}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Top Products */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2"><Package size={16} className="text-amber-500"/> Top Products</h3>
-                        <button onClick={()=>setActiveTab('itemmaster')} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-wider">View All</button>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {loading ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">Loading...</div>
-                          : stats.topProducts.length === 0 ? <div className="p-8 text-center text-slate-400 text-[12px] font-bold">No data yet</div>
-                          : stats.topProducts.map((p, i) => (
-                            <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center text-amber-700 font-black text-[11px]">
-                                        {i + 1}
-                                    </div>
-                                    <div>
-                                        <div className="text-[12px] font-black text-slate-900 truncate max-w-[220px]">{p.name}</div>
-                                        <div className="text-[10px] font-bold text-slate-500">{p.qty} sold</div>
-                                    </div>
-                                </div>
-                                <div className="text-[13px] font-black text-slate-900">{fmt(p.revenue)}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
+}

@@ -26,7 +26,7 @@ export async function POST(req) {
         // Connect to Vendure Backend (URL configured via env variable)
         const VENDURE_BASE = (process.env.VENDURE_SHOP_API_URL ? process.env.VENDURE_SHOP_API_URL.replace(/\/shop-api$/, '') : null)
             || process.env.NEXT_PUBLIC_VENDURE_API_URL
-            || 'http://127.0.0.1:3000';
+            || 'http://127.0.0.1:3006';
         const res = await fetch(`${VENDURE_BASE.replace(/\/$/, '')}/shop-api`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

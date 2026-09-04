@@ -20,7 +20,7 @@
  */
 const VENDURE_BASE = (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_VENDURE_API_URL)
     ? process.env.NEXT_PUBLIC_VENDURE_API_URL.replace(/\/$/, '')
-    : 'http://127.0.0.1:3000';
+    : 'http://127.0.0.1:3006';
 const ADMIN_API = `${VENDURE_BASE}/admin-api`;
 const SHOP_API = `${VENDURE_BASE}/shop-api`;
 

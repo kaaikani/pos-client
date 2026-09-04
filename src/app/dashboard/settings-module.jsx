@@ -236,7 +236,7 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `pharma-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `pos-backup-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         alert('Backup file downloaded.');
     };
@@ -599,7 +599,7 @@ export default function SettingsModule({ section = 'configuration', onChangeSect
                                 <div className="flex items-center gap-2"><label className={`${lbl12} w-32`}>Purchase Default Focus</label><select value={F.purchaseDefaultFocus} onChange={e=>setF('purchaseDefaultFocus', e.target.value)} className={`${csel} flex-1`}><option>Type</option><option>ItemDetail</option><option>Supplier</option></select></div>
 
                                 <div className="flex items-center gap-2"><label className={`${lbl12} w-24`}>Posting Ledger1</label><input value={F.postingLedger1} onChange={e=>setF('postingLedger1', e.target.value)} className={`${cinp} flex-1`}/></div>
-                                <div className="flex items-center gap-2"><label className={`${lbl12} w-24`}>Default Category</label><select value={F.defaultCategory} onChange={e=>setF('defaultCategory', e.target.value)} className={`${csel} flex-1`}><option>Na</option><option>Food</option><option>Medical</option></select></div>
+                                <div className="flex items-center gap-2"><label className={`${lbl12} w-24`}>Default Category</label><select value={F.defaultCategory} onChange={e=>setF('defaultCategory', e.target.value)} className={`${csel} flex-1`}><option>Na</option><option>Food</option><option>General</option><option>Retail</option></select></div>
                                 <div className="flex items-center gap-2"><label className={`${lbl12} w-32`}>SalReturn Default Focus</label><select value={F.salReturnDefaultFocus} onChange={e=>setF('salReturnDefaultFocus', e.target.value)} className={`${csel} flex-1`}><option>ItemDetail</option><option>Customer</option></select></div>
 
                                 <div className="flex items-center gap-2"><label className={`${lbl12} w-24`}>Posting Ledger 2</label><input value={F.postingLedger2} onChange={e=>setF('postingLedger2', e.target.value)} className={`${cinp} flex-1`}/></div>

@@ -1,425 +1,575 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { ListPaymentsQuery, CreatePaymentCommand, DeletePaymentCommand, ListPurchasesQuery } from '../../core/queries/pharma.query';
+/**
+ * Payment — paying a supplier against their open bills.
+ *
+ * The supplier-side mirror of Receipt, on the same engine:
+ *   PARTIES  suppliers we owe, worst overdue first.
+ *   PAY      one supplier's open bills with an Allocate column, oldest first.
+ *
+ * The screen this replaces made the operator type the bill number and amounts by
+ * hand, and the server then settled oldest-bill-first regardless — so paying
+ * against one specific invoice cleared different ones. The server now applies
+ * exactly the allocation chosen here, under a row lock.
+ *
+ * Payment carries a discount the receipt side does not: a bill can be settled by
+ * cash plus a settlement discount. `Paying + Discount` is what clears the bill,
+ * and that sum is what the allocation line sends.
+ *
+ * Money is in RUPEES — the Ledger stores rupees, not minor units.
+ */
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import {
+    Wallet, RefreshCw, ChevronLeft, Truck, AlertTriangle,
+    Check, Zap, Eraser, Printer,
+} from 'lucide-react';
+import { LedgerPartiesQuery, LedgerOpenBillsQuery } from '../../core/queries/ledger.query';
+import { CreatePaymentCommand } from '../../core/queries/pharma.query';
+import { invalidateDashboard } from '../../core/queries/dashboard.query';
+import {
+    Page, PageHeader, PageBody, HeaderStat, ListToolbar, Button, DataTable,
+    Banner, EmptyState, Card, Field, Input, Select, Textarea,
+    FormGrid, money, useConfirm, ShortcutHints,
+} from '../../components/pos';
+import { canDo, readSession } from '../../components/pos/permissions';
+import { printVoucher, VOUCHER_SIZES } from '../../components/pos/voucher-print';
 
-const LEDGER_LS_KEY = 'supplier_registry';
-function loadSuppliers() { try { return JSON.parse(localStorage.getItem(LEDGER_LS_KEY) || '[]'); } catch { return []; } }
+const MODES = ['CASH', 'BANK', 'UPI', 'CHEQUE'];
+const SIZE_KEY = 'pos_payment_print_size';
+
+const today = () => new Date().toISOString().slice(0, 10);
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const r2 = (n) => Math.round((num(n) + Number.EPSILON) * 100) / 100;
+
+/** Days overdue drives the colour, same banding as Ledger and Receipt. */
+function Band({ days }) {
+    const d = num(days);
+    const tone = d <= 0
+        ? { c: 'var(--pos-ok)', b: 'var(--pos-ok-soft)', t: 'Current' }
+        : d <= 30
+            ? { c: 'var(--pos-warn)', b: 'var(--pos-warn-soft)', t: `${d}d` }
+            : { c: 'var(--pos-danger)', b: 'var(--pos-danger-soft)', t: `${d}d` };
+    return (
+        <span className="inline-flex px-1.5 py-0.5 rounded text-[10.5px] font-semibold"
+              style={{ color: tone.c, background: tone.b }}>
+            {tone.t}
+        </span>
+    );
+}
 
 export default function PaymentModule() {
-    const [payments, setPayments] = useState([]);
-    const [purchases, setPurchases] = useState([]);
-    const [suppliers, setSuppliers] = useState([]);
-    const [selectedIdx, setSelectedIdx] = useState(-1);
-    const [mode, setMode] = useState('new');
+    const session = useMemo(() => readSession(), []);
+    const perms = session?.permissions;
+    const mayPay = canDo(perms, 'payment.create');
+    const confirm = useConfirm();
 
-    const payNoRef = useRef(null);
-    // Header form
-    const [payNo, setPayNo] = useState('0');
-    const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+    const [parties, setParties] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [banner, setBanner] = useState(null);
+
+    const [party, setParty] = useState(null);
+    const [bills, setBills] = useState([]);
+    const [billsLoading, setBillsLoading] = useState(false);
+
+    // Voucher header
+    const [docNo, setDocNo] = useState('');
+    const [docDate, setDocDate] = useState(today());
+    const [mode, setMode] = useState('CASH');
     const [refNo, setRefNo] = useState('');
-    const [payType, setPayType] = useState('Cash');
-    const [otherState, setOtherState] = useState(false);
-    const [supplierName, setSupplierName] = useState('');
-    const [supplierGST, setSupplierGST] = useState('');
-    const [orderRef, setOrderRef] = useState('');
-    const [transMode, setTransMode] = useState('');
-    const [address, setAddress] = useState('');
-    const [chequeNo, setChequeNo] = useState('');
-    const [bankName, setBankName] = useState('');
     const [narration, setNarration] = useState('');
+    const [paying, setPaying] = useState('');
 
-    // Payment rows — invoices being settled
-    const [rows, setRows] = useState([]);
+    // ledgerId -> { pay, disc } as typed
+    const [alloc, setAlloc] = useState({});
+    const [saving, setSaving] = useState(false);
+    const payingRef = useRef(null);
 
-    // Supplier search popup
-    const [showSupSearch, setShowSupSearch] = useState(false);
-    const [supSearchText, setSupSearchText] = useState('');
-    const [supSelIdx, setSupSelIdx] = useState(0);
-    const supSearchRef = useRef(null);
+    // Printing
+    const [printSize, setPrintSize] = useState('A5');
+    const [autoPrint, setAutoPrint] = useState(true);
+    const [lastVoucher, setLastVoucher] = useState(null);
 
-    // Invoice search popup
-    const [showInvSearch, setShowInvSearch] = useState(false);
-    const [invSearchText, setInvSearchText] = useState('');
-    const [invRowIdx, setInvRowIdx] = useState(-1);
-    const [invSelIdx, setInvSelIdx] = useState(0);
-    const invSearchRef = useRef(null);
-
-    useEffect(() => { loadAll(); }, []);
-    const loadAll = async () => {
-        try {
-            const [p, purch] = await Promise.all([ new ListPaymentsQuery().execute(), new ListPurchasesQuery().execute() ]);
-            setPayments(p); setPurchases(purch); setSuppliers(loadSuppliers());
-            setPayNo(String(p.length));
-        } catch (e) { console.error(e); }
-    };
-
-    const blankRow = () => ({ invoiceNo: '', invDate: '', purchaseId: '', totalAmt: '', paidAmt: '', balanceAmt: '', payingAmt: '', discPct: '', discAmt: '', netAmt: '' });
-
-    const addRow = () => setRows(prev => [...prev, blankRow()]);
-
-    const updateRow = (idx, field, val) => {
-        setRows(prev => prev.map((r, i) => {
-            if (i !== idx) return r;
-            const u = { ...r, [field]: val };
-            const total = parseFloat(u.totalAmt) || 0;
-            const paid = parseFloat(u.paidAmt) || 0;
-            u.balanceAmt = (total - paid).toFixed(2);
-            const paying = parseFloat(u.payingAmt) || 0;
-            const discP = parseFloat(u.discPct) || 0;
-            const discA = paying * discP / 100;
-            u.discAmt = discA.toFixed(2);
-            u.netAmt = (paying - discA).toFixed(2);
-            return u;
-        }));
-    };
-
-    const removeRow = (idx) => setRows(prev => prev.filter((_, i) => i !== idx));
-
-    // ── Supplier search ──
-    const openSupSearch = () => { setShowSupSearch(true); setSupSearchText(''); setSupSelIdx(0); setTimeout(()=>supSearchRef.current?.focus(),50); };
-    const filteredSuppliers = (() => {
-        // Merge: suppliers registry + unique suppliers from purchases
-        const fromPurch = [...new Set(purchases.map(p => p.supplier).filter(Boolean))].map(s => ({ name: s, contactNumber: '', gstNumber: '' }));
-        const all = [...suppliers];
-        fromPurch.forEach(p => { if (!all.find(a => a.name === p.name)) all.push(p); });
-        if (!supSearchText) return all.slice(0, 30);
-        const s = supSearchText.toLowerCase();
-        return all.filter(sp => (sp.name||'').toLowerCase().includes(s) || (sp.contactNumber||'').includes(supSearchText));
-    })();
-
-    const pickSupplier = (sp) => {
-        if (!sp) return;
-        setSupplierName(sp.name); setSupplierGST(sp.gstNumber || ''); setAddress(sp.address || '');
-        setShowSupSearch(false);
-        // Auto-load unpaid invoices for this supplier
-        const supInvoices = purchases.filter(p => p.supplier === sp.name);
-        if (supInvoices.length > 0 && rows.length === 0) {
-            setRows(supInvoices.map(inv => ({
-                invoiceNo: inv.invoiceNo || inv.purchaseNo, invDate: inv.purchaseDate, purchaseId: inv.id,
-                totalAmt: String(inv.netAmount || inv.subtotal || 0), paidAmt: '0',
-                balanceAmt: String(inv.netAmount || inv.subtotal || 0),
-                payingAmt: '', discPct: '0', discAmt: '0', netAmt: '0',
-            })));
-        }
-    };
-
-    // ── Invoice search ──
-    const openInvSearch = (rowIdx) => { setInvRowIdx(rowIdx); setShowInvSearch(true); setInvSearchText(''); setInvSelIdx(0); setTimeout(()=>invSearchRef.current?.focus(),50); };
-    const filteredInvoices = (() => {
-        const list = supplierName ? purchases.filter(p => p.supplier === supplierName) : purchases;
-        if (!invSearchText) return list.slice(0, 30);
-        const s = invSearchText.toLowerCase();
-        return list.filter(p => (p.invoiceNo||'').toLowerCase().includes(s) || (p.purchaseNo||'').toLowerCase().includes(s));
-    })();
-    const pickInvoice = (inv) => {
-        if (!inv) return;
-        let idx = invRowIdx;
-        setRows(prev => {
-            let nr = [...prev];
-            while (nr.length <= idx) nr.push(blankRow());
-            const total = inv.netAmount || inv.subtotal || 0;
-            nr[idx] = { ...nr[idx],
-                invoiceNo: inv.invoiceNo || inv.purchaseNo, invDate: inv.purchaseDate, purchaseId: inv.id,
-                totalAmt: String(total), paidAmt: '0', balanceAmt: String(total),
-                payingAmt: String(total), discPct: '0', discAmt: '0', netAmt: String(total),
-            };
-            return nr;
-        });
-        setShowInvSearch(false);
-    };
-
-    // ── Hotkeys ──
     useEffect(() => {
-        const handler = (e) => {
-            if (e.key === 'F4') { e.preventDefault(); handleCancel(); return; }
-            if (e.key === 'F1') { e.preventDefault(); handleSave(); return; }
-            if (showSupSearch) {
-                if (e.key === 'Escape') { e.preventDefault(); setShowSupSearch(false); return; }
-                if (e.key === 'ArrowDown') { e.preventDefault(); setSupSelIdx(p => Math.min(p+1, filteredSuppliers.length-1)); return; }
-                if (e.key === 'ArrowUp') { e.preventDefault(); setSupSelIdx(p => Math.max(p-1, 0)); return; }
-                if (e.key === 'Enter') { e.preventDefault(); pickSupplier(filteredSuppliers[supSelIdx]); return; }
-            }
-            if (showInvSearch) {
-                if (e.key === 'Escape') { e.preventDefault(); setShowInvSearch(false); return; }
-                if (e.key === 'ArrowDown') { e.preventDefault(); setInvSelIdx(p => Math.min(p+1, filteredInvoices.length-1)); return; }
-                if (e.key === 'ArrowUp') { e.preventDefault(); setInvSelIdx(p => Math.max(p-1, 0)); return; }
-                if (e.key === 'Enter') { e.preventDefault(); pickInvoice(filteredInvoices[invSelIdx]); return; }
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [showSupSearch, showInvSearch, supSelIdx, invSelIdx, filteredSuppliers, filteredInvoices, rows, supplierName]);
+        try {
+            const saved = localStorage.getItem(SIZE_KEY);
+            if (saved && VOUCHER_SIZES.some(s => s.id === saved)) setPrintSize(saved);
+        } catch { /* private mode */ }
+    }, []);
 
-    // Totals
-    const totalPaying = rows.reduce((s, r) => s + (parseFloat(r.payingAmt) || 0), 0);
-    const totalDisc = rows.reduce((s, r) => s + (parseFloat(r.discAmt) || 0), 0);
-    const totalNet = rows.reduce((s, r) => s + (parseFloat(r.netAmt) || 0), 0);
+    const chooseSize = useCallback((id) => {
+        setPrintSize(id);
+        try { localStorage.setItem(SIZE_KEY, id); } catch { /* private mode */ }
+    }, []);
 
-    // ── Actions ──
-    const handleAdd = () => {
-        setMode('new');
-        setPayNo(String(payments.length));
-        setPayDate(new Date().toISOString().split('T')[0]);
-        setRefNo(''); setSupplierName(''); setSupplierGST(''); setAddress('');
-        setOrderRef(''); setTransMode(''); setChequeNo(''); setBankName(''); setNarration('');
-        setRows([blankRow()]); setSelectedIdx(-1);
-    };
+    const loadParties = useCallback(async () => {
+        setLoading(true);
+        try {
+            const list = await new LedgerPartiesQuery().execute('SUPPLIER');
+            setParties((list || []).filter(p => num(p.balance) > 0));
+        } catch (e) {
+            setBanner({ tone: 'danger', text: e.message || 'Could not load suppliers.' });
+        }
+        setLoading(false);
+    }, []);
 
-    const handleSave = async () => {
-        if (!supplierName.trim()) return alert('Supplier is required.');
-        const validRows = rows.filter(r => r.invoiceNo && parseFloat(r.payingAmt) > 0);
-        if (validRows.length === 0) return alert('Enter paying amount for at least one invoice.');
+    useEffect(() => { loadParties(); }, [loadParties]);
+
+    const openParty = useCallback(async (p) => {
+        setParty(p);
+        setBills([]);
+        setAlloc({});
+        setNarration('');
+        setRefNo('');
+        setPaying('');
+        setDocDate(today());
+        setDocNo(`PAY-${Date.now().toString().slice(-8)}`);
+        setBillsLoading(true);
+        try {
+            const list = await new LedgerOpenBillsQuery().execute('SUPPLIER', p.partyName, p.contactNumber);
+            setBills(list || []);
+        } catch (e) {
+            setBanner({ tone: 'danger', text: e.message || 'Could not load open bills.' });
+        }
+        setBillsLoading(false);
+        setTimeout(() => payingRef.current?.focus(), 0);
+    }, []);
+
+    const backToList = useCallback(() => { setParty(null); setBills([]); setAlloc({}); }, []);
+
+    /* ── derived totals ───────────────────────────────────── */
+    const totalOpen = useMemo(() => bills.reduce((a, b) => a + num(b.balance), 0), [bills]);
+    const lineOf = useCallback((id) => alloc[id] || { pay: '', disc: '' }, [alloc]);
+
+    const allocPay = useMemo(
+        () => r2(Object.values(alloc).reduce((a, v) => a + num(v.pay), 0)),
+        [alloc],
+    );
+    const allocDisc = useMemo(
+        () => r2(Object.values(alloc).reduce((a, v) => a + num(v.disc), 0)),
+        [alloc],
+    );
+    const allocTotal = r2(allocPay + allocDisc);
+    const payingAmt = r2(paying);
+    const unapplied = r2(payingAmt - allocPay);
+
+    /* The server refuses these too — saying so here saves the round trip. */
+    const problem = useMemo(() => {
+        if (payingAmt <= 0 && allocDisc <= 0) return 'Enter the amount being paid.';
+        if (allocTotal <= 0) return 'Allocate the payment against at least one bill.';
+        if (allocPay > payingAmt) {
+            return `Allocated ${money(allocPay)} is more than the ${money(payingAmt)} being paid.`;
+        }
+        const over = bills.find(b => {
+            const l = alloc[b.id];
+            return l && r2(num(l.pay) + num(l.disc)) > num(b.balance) + 0.001;
+        });
+        if (over) {
+            return `Bill ${over.invoiceNumber} has only ${money(num(over.balance))} outstanding.`;
+        }
+        return null;
+    }, [payingAmt, allocPay, allocDisc, allocTotal, alloc, bills]);
+
+    const setLine = useCallback((id, field, v) => {
+        setAlloc(prev => ({ ...prev, [id]: { ...(prev[id] || { pay: '', disc: '' }), [field]: v } }));
+    }, []);
+
+    /** Spread the cash across bills, oldest first. Existing discounts are kept. */
+    const autoAllocate = useCallback(() => {
+        let left = r2(paying);
+        if (left <= 0) { setBanner({ tone: 'warn', text: 'Enter the amount being paid first.' }); return; }
+        const next = {};
+        for (const b of bills) {
+            const disc = num(lineOf(b.id).disc);
+            const room = r2(num(b.balance) - disc);
+            if (room <= 0) { if (disc > 0) next[b.id] = { pay: '', disc: String(disc) }; continue; }
+            if (left <= 0) { if (disc > 0) next[b.id] = { pay: '', disc: String(disc) }; continue; }
+            const take = Math.min(left, room);
+            next[b.id] = { pay: String(r2(take)), disc: disc > 0 ? String(disc) : '' };
+            left = r2(left - take);
+        }
+        setAlloc(next);
+        if (left > 0) {
+            setBanner({
+                tone: 'info',
+                text: `${money(left)} could not be allocated — it is more than the total outstanding.`,
+            });
+        }
+    }, [paying, bills, lineOf]);
+
+    const clearAllocation = useCallback(() => setAlloc({}), []);
+
+    const save = useCallback(async () => {
+        if (problem) { setBanner({ tone: 'warn', text: problem }); return; }
+
+        if (unapplied > 0) {
+            const ok = await confirm({
+                title: 'Leave part of the payment unapplied?',
+                message: `${money(unapplied)} of the ${money(payingAmt)} being paid is not allocated to any bill. `
+                       + 'It will be recorded on the voucher but will not reduce any invoice.',
+                confirmLabel: 'Save anyway',
+            });
+            if (!ok) return;
+        }
+
+        // The server clears a bill by pay + discount, so that sum is the line amount.
+        const lines = bills
+            .filter(b => r2(num(lineOf(b.id).pay) + num(lineOf(b.id).disc)) > 0)
+            .map(b => {
+                const l = lineOf(b.id);
+                return {
+                    ledgerId: Number(b.id),
+                    amount: r2(num(l.pay) + num(l.disc)),
+                    paying: r2(l.pay),
+                    discount: r2(l.disc),
+                    invoiceNumber: b.invoiceNumber,
+                    invoiceDate: b.invoiceDate,
+                    billAmount: num(b.amount),
+                };
+            });
+
+        setSaving(true);
         try {
             await new CreatePaymentCommand().execute({
-                payNo, payDate, refNo, payType, otherState,
-                supplierName, supplierGST, orderRef, transMode, address, chequeNo, bankName, narration,
-                rows: validRows, totalPaying, totalDisc, totalNet,
+                payNo: docNo,
+                payDate: docDate,
+                refNo,
+                payType: 'Against Ref.',
+                supplierName: party.partyName,
+                supplierGST: party.gstNumber || '',
+                transMode: mode,
+                chequeNo: mode === 'CHEQUE' ? refNo : '',
+                narration,
+                rows: lines,
+                totalPaying: payingAmt,
+                totalDisc: allocDisc,
+                totalNet: r2(payingAmt + allocDisc),
             });
-            await loadAll();
-            alert(`Payment saved: ₹${totalNet.toFixed(2)} to ${supplierName}`);
-            handleAdd();
-        } catch (err) { alert(err.message); }
-    };
+            invalidateDashboard();
 
-    const handleDelete = async () => {
-        if (selectedIdx < 0) return alert('No payment selected.');
-        const p = payments[selectedIdx];
-        if (!p?.id) return;
-        if (!confirm('Delete this payment?')) return;
-        try { await new DeletePaymentCommand().execute(p.id); await loadAll(); handleAdd(); } catch (err) { alert(err.message); }
-    };
+            // Capture the voucher BEFORE state is cleared — openBefore must be the
+            // balance as it stood when the money went out.
+            const voucher = {
+                kind: 'PAYMENT',
+                company: { name: 'AVS ECOM PRIVATE LIMITED' },
+                docNo,
+                docDate,
+                partyName: party.partyName,
+                mode,
+                refNo,
+                narration,
+                total: payingAmt,
+                unapplied,
+                partyBalanceAfter: r2(totalOpen - allocTotal),
+                lines: lines.map(l => {
+                    const b = bills.find(x => Number(x.id) === l.ledgerId);
+                    return {
+                        invoiceNumber: l.invoiceNumber,
+                        invoiceDate: l.invoiceDate,
+                        billAmount: l.billAmount,
+                        openBefore: num(b?.balance),
+                        paidNow: l.amount,
+                    };
+                }),
+            };
+            setLastVoucher(voucher);
 
-    const handleCancel = () => { if (confirm('Cancel current entry?')) handleAdd(); };
+            setBanner({
+                tone: 'ok',
+                text: `Payment ${docNo} saved — ${money(payingAmt)} paid to ${party.partyName}`
+                    + `${allocDisc > 0 ? `, ${money(allocDisc)} discount` : ''}.`
+                    + ` ${money(voucher.partyBalanceAfter)} still payable.`,
+            });
 
-    const nav = (dir) => {
-        if (payments.length === 0) return;
-        let idx = selectedIdx;
-        if (dir === 'first') idx = 0;
-        else if (dir === 'last') idx = payments.length - 1;
-        else if (dir === 'prev') idx = Math.max(0, selectedIdx - 1);
-        else if (dir === 'next') idx = Math.min(payments.length - 1, selectedIdx + 1);
-        const p = payments[idx];
-        setSelectedIdx(idx); setPayNo(p.payNo); setPayDate(p.payDate); setRefNo(p.refNo);
-        setPayType(p.payType); setOtherState(p.otherState); setSupplierName(p.supplierName);
-        setSupplierGST(p.supplierGST); setOrderRef(p.orderRef); setTransMode(p.transMode);
-        setAddress(p.address); setChequeNo(p.chequeNo); setBankName(p.bankName);
-        setNarration(p.narration); setRows(p.rows); setMode('view');
-    };
+            if (autoPrint) printVoucher(voucher, printSize);
 
-    // Table columns
-    const cols = [
-        { key: 'invoiceNo', label: 'InvoiceNo', w: 120 },
-        { key: 'invDate', label: 'Inv Date', w: 90 },
-        { key: 'totalAmt', label: 'Total Amt', w: 90 },
-        { key: 'paidAmt', label: 'Paid Amt', w: 90 },
-        { key: 'balanceAmt', label: 'Balance', w: 90 },
-        { key: 'payingAmt', label: 'Paying Amt', w: 100 },
-        { key: 'discPct', label: 'Disc%', w: 60 },
-        { key: 'discAmt', label: 'DiscA...', w: 80 },
-        { key: 'netAmt', label: 'Net Amt', w: 90 },
+            await loadParties();
+            backToList();
+        } catch (e) {
+            setBanner({ tone: 'danger', text: e.message || 'Could not save the payment.' });
+        }
+        setSaving(false);
+    }, [problem, unapplied, payingAmt, allocDisc, allocTotal, totalOpen, bills, lineOf,
+        docNo, docDate, refNo, party, mode, narration, autoPrint, printSize,
+        confirm, loadParties, backToList]);
+
+    /* ── party list ───────────────────────────────────────── */
+    const shown = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        const list = q
+            ? parties.filter(p =>
+                `${p.partyName} ${p.contactNumber || ''} ${p.gstNumber || ''}`.toLowerCase().includes(q))
+            : parties;
+        return [...list].sort((a, b) => num(b.maxDaysOverdue) - num(a.maxDaysOverdue));
+    }, [parties, search]);
+
+    const totals = useMemo(() => ({
+        balance: parties.reduce((a, p) => a + num(p.balance), 0),
+        bills: parties.reduce((a, p) => a + num(p.openBillCount), 0),
+    }), [parties]);
+
+    const partyColumns = [
+        {
+            key: 'partyName', header: 'Supplier',
+            render: (p) => (
+                <div className="min-w-0">
+                    <strong>{p.partyName}</strong>
+                    {p.contactNumber && (
+                        <div className="text-[11.5px] text-[var(--pos-ink-3)]">{p.contactNumber}</div>
+                    )}
+                </div>
+            ),
+        },
+        { key: 'openBillCount', header: 'Open bills', width: 100, align: 'right', className: 'num',
+          render: (p) => num(p.openBillCount) },
+        { key: 'balance', header: 'Payable', width: 140, align: 'right', className: 'num',
+          render: (p) => <span className="font-semibold">{money(num(p.balance))}</span> },
+        { key: 'maxDaysOverdue', header: 'Oldest', width: 90, align: 'right',
+          render: (p) => <Band days={p.maxDaysOverdue} /> },
     ];
 
-    const cell = "bg-white h-6 px-1 text-[11px] font-bold text-slate-900 outline-none border-r border-[#b0c4d0] focus:bg-yellow-50";
+    if (!party) {
+        return (
+            <Page>
+                <PageHeader
+                    icon={Wallet}
+                    title="Payment"
+                    subtitle="Pay a supplier against their open bills"
+                    meta={<>
+                        <HeaderStat label="Payable" value={money(totals.balance, 0)} />
+                        <HeaderStat label="Open bills" value={totals.bills} />
+                    </>}
+                    actions={<>
+                        {lastVoucher && (
+                            <Button variant="default" icon={Printer} size="sm"
+                                    onClick={() => printVoucher(lastVoucher, printSize)}
+                                    title={`Reprint voucher ${lastVoucher.docNo}`}>
+                                Reprint {lastVoucher.docNo}
+                            </Button>
+                        )}
+                        <Button variant="ghost" icon={RefreshCw} onClick={loadParties} title="Refresh" />
+                    </>}
+                />
+                <PageBody className="flex flex-col gap-4">
+                    {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
+                    <ListToolbar
+                        search={search}
+                        onSearch={setSearch}
+                        placeholder="Search supplier, mobile or GSTIN…"
+                        count={shown.length}
+                        countLabel="suppliers"
+                        actions={<span className="text-[12px] text-[var(--pos-ink-3)]">Click a supplier to pay</span>}
+                    />
+                    <DataTable
+                        columns={partyColumns}
+                        rows={shown}
+                        rowKey={(p) => `${p.partyName}|${p.contactNumber || ''}`}
+                        onActivate={openParty}
+                        onSelect={() => {}}
+                        loading={loading}
+                        empty={
+                            <EmptyState
+                                icon={Truck}
+                                title="Nothing payable"
+                                hint="Every supplier bill is settled. A payment is only raised against an open bill."
+                            />
+                        }
+                    />
+                </PageBody>
+            </Page>
+        );
+    }
 
-    return (<div className="flex flex-col h-[85vh] rounded-md overflow-hidden font-sans shadow-xl" style={{ background: '#d4e6f1' }}>
-        {/* Title bar */}
-        <div className="h-6 flex items-center px-2 shrink-0 bg-gradient-to-r from-[#1a5276] to-[#2980b9]">
-            <span className="text-white text-[11px] font-bold">Payment - AVS ECOM PRIVATE LIMITED 2026-2027</span>
-        </div>
+    /* ── payment view ─────────────────────────────────────── */
+    const billColumns = [
+        { key: 'invoiceNumber', header: 'Bill No', width: 120,
+          render: (b) => <span className="code">{b.invoiceNumber}</span> },
+        { key: 'invoiceDate', header: 'Date', width: 105,
+          render: (b) => String(b.invoiceDate || '').slice(0, 10) },
+        { key: 'dueDate', header: 'Due', width: 105,
+          render: (b) => String(b.dueDate || '').slice(0, 10) },
+        { key: 'daysOverdue', header: 'Age', width: 75, align: 'right',
+          render: (b) => <Band days={b.daysOverdue} /> },
+        { key: 'amount', header: 'Bill Amt', width: 110, align: 'right', className: 'num',
+          render: (b) => money(num(b.amount)) },
+        { key: 'balance', header: 'Outstanding', width: 120, align: 'right', className: 'num',
+          render: (b) => <span className="font-semibold">{money(num(b.balance))}</span> },
+        {
+            key: 'pay', header: 'Paying', width: 120, align: 'right',
+            render: (b) => {
+                const l = lineOf(b.id);
+                const over = r2(num(l.pay) + num(l.disc)) > num(b.balance) + 0.001;
+                return (
+                    <Input
+                        numeric type="number" min="0" step="0.01"
+                        value={l.pay}
+                        invalid={over}
+                        aria-label={`Paying against bill ${b.invoiceNumber}`}
+                        onChange={(e) => setLine(b.id, 'pay', e.target.value)}
+                        className="!h-[28px] !text-[12.5px]"
+                        placeholder="0.00"
+                    />
+                );
+            },
+        },
+        {
+            key: 'disc', header: 'Discount', width: 110, align: 'right',
+            render: (b) => {
+                const l = lineOf(b.id);
+                return (
+                    <Input
+                        numeric type="number" min="0" step="0.01"
+                        value={l.disc}
+                        aria-label={`Settlement discount on bill ${b.invoiceNumber}`}
+                        onChange={(e) => setLine(b.id, 'disc', e.target.value)}
+                        className="!h-[28px] !text-[12.5px]"
+                        placeholder="0.00"
+                    />
+                );
+            },
+        },
+        {
+            key: 'after', header: 'Balance after', width: 125, align: 'right', className: 'num',
+            render: (b) => {
+                const l = lineOf(b.id);
+                const applied = r2(num(l.pay) + num(l.disc));
+                const after = r2(num(b.balance) - applied);
+                const cleared = after <= 0 && applied > 0;
+                return (
+                    <span className="font-semibold"
+                          style={{ color: cleared ? 'var(--pos-ok)' : 'var(--pos-ink)' }}>
+                        {cleared ? 'Settled' : money(after)}
+                    </span>
+                );
+            },
+        },
+    ];
 
-        {/* Header form */}
-        <div className="shrink-0 p-2" style={{ background: '#d4e6f1' }}>
-            <div className="flex items-center gap-1 mb-1 text-[11px] font-bold">
-                <div className="flex items-center gap-1"><label>PayNo</label><input ref={payNoRef} autoFocus type="text" value={payNo} onChange={e=>setPayNo(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-16 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-2"><label>PayDate</label><input type="date" value={payDate} onChange={e=>setPayDate(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-28 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-3"><label>Ref.No</label><input type="text" value={refNo} onChange={e=>setRefNo(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-36 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-3">
-                    <label>Supplier</label>
-                    <input type="text" value={supplierName} onFocus={openSupSearch} readOnly className="bg-[#ffffd0] border border-[#7ba0b5] h-5 px-1 flex-1 max-w-xs text-[11px] font-bold outline-none cursor-pointer" title="Click to search supplier"/>
-                </div>
-                <div className="flex items-center gap-1 ml-3"><label>GST</label><input type="text" value={supplierGST} onChange={e=>setSupplierGST(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-32 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-3"><label>Address</label><input type="text" value={address} onChange={e=>setAddress(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 flex-1 max-w-xs text-[11px] font-bold outline-none"/></div>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] font-bold">
-                <label>PayType</label>
-                <select value={payType} onChange={e=>setPayType(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 text-[11px] font-bold outline-none">
-                    <option>Cash</option><option>Bank Transfer</option><option>Cheque</option><option>UPI</option><option>Card</option>
-                </select>
-                <label className="flex items-center gap-1 cursor-pointer ml-3"><input type="checkbox" checked={otherState} onChange={e=>setOtherState(e.target.checked)}/>Other State <span className="text-red-500">⓵</span></label>
-                <span className="ml-6 font-bold text-red-700">{payType.toUpperCase()}</span>
-                <div className="flex items-center gap-1 ml-3"><label>Cheque/Ref No</label><input type="text" value={chequeNo} onChange={e=>setChequeNo(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-32 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-3"><label>Bank</label><input type="text" value={bankName} onChange={e=>setBankName(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 w-36 text-[11px] font-bold outline-none"/></div>
-                <div className="flex items-center gap-1 ml-3"><label>Narration</label><input type="text" value={narration} onChange={e=>setNarration(e.target.value)} className="bg-white border border-[#7ba0b5] h-5 px-1 flex-1 max-w-xs text-[11px] font-bold outline-none"/></div>
-            </div>
-        </div>
+    return (
+        <Page>
+            <PageHeader
+                icon={Wallet}
+                title={party.partyName}
+                subtitle={`${bills.length} open bill${bills.length === 1 ? '' : 's'} · ${money(totalOpen)} payable`}
+                meta={<>
+                    <HeaderStat label="Paying" value={money(payingAmt)} />
+                    <HeaderStat label="Discount" value={money(allocDisc)} />
+                    <HeaderStat label="Unapplied" value={money(unapplied)}
+                                tone={unapplied > 0 ? 'warn' : 'default'} />
+                </>}
+                actions={<Button variant="ghost" icon={ChevronLeft} onClick={backToList}>Back</Button>}
+            />
+            <PageBody className="flex flex-col gap-4">
+                {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
-        {/* Table area with right totals */}
-        <div className="flex-1 flex overflow-hidden bg-white border-y border-[#7ba0b5]">
-            <div className="flex-1 overflow-auto relative">
-                <table className="w-full text-[11px] border-collapse">
-                    <thead className="bg-[#d4e6f1] sticky top-0 z-10">
-                        <tr>
-                            <th className="w-6 border-r border-b border-[#7ba0b5]"></th>
-                            {cols.map(c => (<th key={c.key} className="border-r border-b border-[#7ba0b5] text-slate-700 text-[10px] font-bold py-0.5" style={{width: c.w}}>{c.label}</th>))}
-                            <th className="border-b border-[#7ba0b5] w-8"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((r, i) => (<tr key={i} className="border-b border-[#b0c4d0]">
-                            <td className="w-6 text-center text-blue-600 text-[10px] border-r border-[#b0c4d0]">{i === rows.length-1 ? '▶*' : ''}</td>
-                            {cols.map(c => (
-                                <td key={c.key} className="p-0 border-r border-[#b0c4d0]">
-                                    {c.key === 'invoiceNo' ? (
-                                        <input type="text" value={r.invoiceNo || ''} onFocus={()=>openInvSearch(i)} readOnly className={`${cell} cursor-pointer`} style={{width: c.w}} title="Click to search invoice"/>
-                                    ) : (
-                                        <input type="text" value={r[c.key] || ''} onChange={e=>updateRow(i, c.key, e.target.value)}
-                                            readOnly={['invDate','totalAmt','paidAmt','balanceAmt','discAmt','netAmt'].includes(c.key)}
-                                            className={`${cell} ${['invDate','totalAmt','paidAmt','balanceAmt','discAmt','netAmt'].includes(c.key)?'bg-[#f5f5f5]':''}`}
-                                            style={{width: c.w, textAlign: ['totalAmt','paidAmt','balanceAmt','payingAmt','discPct','discAmt','netAmt'].includes(c.key) ? 'right' : 'left'}}/>
-                                    )}
-                                </td>
-                            ))}
-                            <td className="text-center"><button onClick={()=>removeRow(i)} className="text-red-500 hover:text-red-700 text-xs font-bold">✕</button></td>
-                        </tr>))}
-                        <tr onClick={addRow} className="cursor-pointer hover:bg-blue-50 h-6">
-                            <td className="w-6 text-center text-blue-600 text-[10px] border-r border-[#b0c4d0]">*</td>
-                            <td colSpan={cols.length + 1} className="text-[10px] text-slate-700 px-2">Click to add invoice row</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <Card className="shrink-0" title="Payment">
+                    <FormGrid cols={4}>
+                        <Field label="Voucher No">
+                            <Input value={docNo} onChange={e => setDocNo(e.target.value)} />
+                        </Field>
+                        <Field label="Date" required>
+                            <Input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} />
+                        </Field>
+                        <Field label="Mode" required>
+                            <Select value={mode} onChange={e => setMode(e.target.value)}>
+                                {MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                            </Select>
+                        </Field>
+                        <Field label="Amount paying" required
+                               hint={totalOpen > 0 ? `Total payable ${money(totalOpen)}` : undefined}>
+                            <Input
+                                ref={payingRef}
+                                numeric type="number" min="0" step="0.01"
+                                value={paying}
+                                onChange={e => setPaying(e.target.value)}
+                                placeholder="0.00"
+                            />
+                        </Field>
+                        <Field label={mode === 'CHEQUE' ? 'Cheque number' : 'Reference'} span={2}>
+                            <Input value={refNo} onChange={e => setRefNo(e.target.value)}
+                                   placeholder={mode === 'CHEQUE' ? 'Cheque no.' : 'UPI / transfer reference'} />
+                        </Field>
+                        <Field label="Narration" span={2}>
+                            <Textarea rows={2} value={narration}
+                                      onChange={e => setNarration(e.target.value)}
+                                      placeholder="Why this payment was made" />
+                        </Field>
+                    </FormGrid>
+                </Card>
 
-                {/* Supplier Search Popup */}
-                {showSupSearch && (
-                    <div className="absolute left-1/4 top-2 bg-white border-2 border-[#7ba0b5] shadow-2xl z-30 w-[560px]">
-                        <div className="bg-[#d4e6f1] border-b-2 border-[#7ba0b5] px-2 py-1 flex items-center gap-2">
-                            <label className="text-[12px] font-bold">Search Supplier</label>
-                            <input ref={supSearchRef} type="text" value={supSearchText} onChange={e=>{setSupSearchText(e.target.value);setSupSelIdx(0);}} placeholder="Type supplier name... (↑↓ Enter Esc)" className="flex-1 bg-white border border-[#7ba0b5] h-6 px-2 text-[12px] font-bold outline-none focus:border-[#1a5276]"/>
-                        </div>
-                        <table className="w-full text-[12px] border-collapse">
-                            <thead className="bg-[#eef5fb]"><tr>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold w-12">#</th>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold">Supplier Name</th>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold w-32">Phone</th>
-                                <th className="py-1 px-2 text-left font-bold w-32">GST</th>
-                            </tr></thead>
-                            <tbody>
-                                {filteredSuppliers.length === 0 ? (
-                                    <tr><td colSpan={4} className="py-6 text-center text-slate-700 font-bold">No suppliers. Add in Ledger module.</td></tr>
-                                ) : filteredSuppliers.map((sp, i) => (
-                                    <tr key={i} onClick={()=>pickSupplier(sp)} className={`cursor-pointer border-b border-[#e0e0e0] ${supSelIdx===i?'bg-[#2980b9] text-white':'hover:bg-blue-50'}`}>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] font-bold ${supSelIdx===i?'text-white':''}`}>{i+1}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] font-bold uppercase ${supSelIdx===i?'text-white':''}`}>{sp.name}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] ${supSelIdx===i?'text-white':''}`}>{sp.contactNumber||'-'}</td>
-                                        <td className={`py-0.5 px-2 ${supSelIdx===i?'text-white':''}`}>{sp.gstNumber||'-'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-
-                {/* Invoice Search Popup */}
-                {showInvSearch && (
-                    <div className="absolute left-1/4 top-2 bg-white border-2 border-[#7ba0b5] shadow-2xl z-30 w-[620px]">
-                        <div className="bg-[#d4e6f1] border-b-2 border-[#7ba0b5] px-2 py-1 flex items-center gap-2">
-                            <label className="text-[12px] font-bold">Search Invoice {supplierName && `— ${supplierName}`}</label>
-                            <input ref={invSearchRef} type="text" value={invSearchText} onChange={e=>{setInvSearchText(e.target.value);setInvSelIdx(0);}} placeholder="Type invoice no... (↑↓ Enter Esc)" className="flex-1 bg-white border border-[#7ba0b5] h-6 px-2 text-[12px] font-bold outline-none focus:border-[#1a5276]"/>
-                        </div>
-                        <table className="w-full text-[12px] border-collapse">
-                            <thead className="bg-[#eef5fb]"><tr>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold w-20">Pur.No</th>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold">Invoice No</th>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold">Supplier</th>
-                                <th className="py-1 px-2 text-left border-r border-[#ccc] font-bold w-24">Date</th>
-                                <th className="py-1 px-2 text-right font-bold w-24">Amount</th>
-                            </tr></thead>
-                            <tbody>
-                                {filteredInvoices.length === 0 ? (
-                                    <tr><td colSpan={5} className="py-6 text-center text-slate-700 font-bold">No invoices found.</td></tr>
-                                ) : filteredInvoices.map((inv, i) => (
-                                    <tr key={inv.id} onClick={()=>pickInvoice(inv)} className={`cursor-pointer border-b border-[#e0e0e0] ${invSelIdx===i?'bg-[#2980b9] text-white':'hover:bg-blue-50'}`}>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] font-bold ${invSelIdx===i?'text-white':''}`}>{inv.purchaseNo}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] font-bold ${invSelIdx===i?'text-white':''}`}>{inv.invoiceNo}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] ${invSelIdx===i?'text-white':''}`}>{inv.supplier}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e0e0] ${invSelIdx===i?'text-white':''}`}>{new Date(inv.purchaseDate).toLocaleDateString('en-IN')}</td>
-                                        <td className={`py-0.5 px-2 text-right font-bold ${invSelIdx===i?'text-white':''}`}>{(inv.netAmount||inv.subtotal||0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {/* Right totals */}
-            <div className="w-24 border-l border-[#7ba0b5] bg-white">
-                <div className="bg-[#d4e6f1] h-6 border-b border-[#7ba0b5] text-[10px] font-bold flex items-center justify-end px-2 text-slate-700">Total</div>
-                <div className="py-0.5 px-2 text-right border-b border-[#e0e0e0] text-[11px] font-bold">{totalPaying.toFixed(2)}</div>
-                <div className="py-0.5 px-2 text-right border-b border-[#e0e0e0] text-[11px] font-bold text-red-600">{totalDisc.toFixed(2)}</div>
-                <div className="py-0.5 px-2 text-right border-b border-[#e0e0e0] text-[11px] font-black text-blue-700">{totalNet.toFixed(2)}</div>
-            </div>
-        </div>
-
-        {/* Bottom controls */}
-        <div className="shrink-0" style={{ background: '#5dade2' }}>
-            <div className="flex items-stretch">
-                <div className="flex-1 bg-[#5dade2] p-2">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="text-white text-[11px] font-bold bg-[#1a5276] px-1.5 py-0.5 rounded">F1 = Save</span>
-                        <label className="text-[#16a085] text-[12px] font-black">Payment Entry</label>
-                    </div>
-                    <div className="flex items-center gap-0">
-                        <button onClick={handleAdd} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Add</button>
-                        <button onClick={handleSave} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Save</button>
-                        <button onClick={handleDelete} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Delete</button>
-                        <button onClick={handleCancel} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Cancel</button>
-                    </div>
-                    <div className="flex items-center gap-0 mt-1">
-                        <button onClick={()=>nav('first')} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">First</button>
-                        <button onClick={()=>nav('prev')} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Prev</button>
-                        <button onClick={()=>nav('next')} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Nex</button>
-                        <button onClick={()=>nav('last')} className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-5 py-1 text-[12px] active:translate-y-[1px]">Last</button>
-                        <button className="bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold px-3 py-1 text-[12px] active:translate-y-[1px]">V</button>
-                    </div>
-                </div>
-
-                {/* Right: Save / F4 Cancel + totals panel */}
-                <div className="w-[380px] bg-[#5dade2] p-2">
-                    <div className="flex items-center gap-0 mb-1">
-                        <button onClick={handleSave} className="flex-1 bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold py-1 text-[12px] active:translate-y-[1px]">Save</button>
-                        <button onClick={handleCancel} className="flex-1 bg-white hover:bg-slate-100 border border-slate-600 text-slate-900 font-bold py-1 text-[12px] active:translate-y-[1px]">F4 : Cancel</button>
-                    </div>
-                    <table className="w-full text-[11px] border-collapse bg-white border border-[#888]">
-                        <tbody>
-                            <tr className="border-b border-[#ccc]">
-                                <td className="px-2 py-0.5 font-bold text-slate-700">Total Paying</td>
-                                <td className="px-2 py-0.5 text-right font-bold">{totalPaying.toFixed(2)}</td>
+                <Card className="shrink-0"
+                    title="Open bills"
+                    subtitle="Oldest first — a bill clears by Paying plus Discount"
+                    flush
+                    actions={<>
+                        <Button size="sm" variant="default" icon={Zap} onClick={autoAllocate}>
+                            Auto allocate
+                        </Button>
+                        <Button size="sm" variant="ghost" icon={Eraser} onClick={clearAllocation}>
+                            Clear
+                        </Button>
+                    </>}
+                >
+                    <DataTable
+                        columns={billColumns}
+                        rows={bills}
+                        loading={billsLoading}
+                        empty={
+                            <EmptyState
+                                icon={Wallet}
+                                title="No open bills"
+                                hint={`${party.partyName} has nothing outstanding.`}
+                            />
+                        }
+                        footer={
+                            <tr>
+                                <td colSpan={5}>Total</td>
+                                <td className="num">{money(totalOpen)}</td>
+                                <td className="num">{money(allocPay)}</td>
+                                <td className="num">{money(allocDisc)}</td>
+                                <td className="num">{money(r2(totalOpen - allocTotal))}</td>
                             </tr>
-                            <tr className="border-b border-[#ccc]">
-                                <td className="px-2 py-0.5 font-bold text-slate-700">Total Discount</td>
-                                <td className="px-2 py-0.5 text-right font-bold text-red-600">{totalDisc.toFixed(2)}</td>
-                            </tr>
-                            <tr className="bg-[#1a5276] text-white">
-                                <td className="px-2 py-0.5 font-black">NET PAYMENT</td>
-                                <td className="px-2 py-0.5 text-right font-black text-[14px]">₹{totalNet.toFixed(2)}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+                        }
+                    />
+                </Card>
 
-        {/* Hotkeys legend */}
-        <div className="shrink-0 border-t border-[#7a9ca8] text-[10px] font-bold text-slate-900 bg-white">
-            <div className="bg-[#1a5276] text-white px-2 py-0.5 text-[9px] uppercase tracking-widest font-black">⌨ Hotkeys</div>
-            <div className="grid grid-cols-6 border border-[#aaa] border-t-0">
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">F1 - <u>S</u>ave</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">F4 - <u>C</u>ancel</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">↑↓ Navigate</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">Enter - Pick</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">Tab - Next field</span>
-                <span className="px-2 py-0 border-b border-[#aaa]">Esc - Close</span>
-            </div>
-        </div>
-    </div>);
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <ShortcutHints items={[['Enter', 'next field'], ['Esc', 'back to list']]} />
+                        <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--pos-ink-2)]">
+                            <input type="checkbox" name="autoPrintPayment" checked={autoPrint}
+                                   onChange={e => setAutoPrint(e.target.checked)}
+                                   className="pos-focusable accent-[var(--pos-ink-2)] w-[14px] h-[14px]" />
+                            Print voucher
+                        </label>
+                        <Select value={printSize} onChange={e => chooseSize(e.target.value)}
+                                aria-label="Voucher print size"
+                                className="!h-[28px] !text-[12px] !w-[110px]">
+                            {VOUCHER_SIZES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                        </Select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {problem && (
+                            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--pos-warn)]">
+                                <AlertTriangle size={13} /> {problem}
+                            </span>
+                        )}
+                        {!problem && unapplied > 0 && (
+                            <span className="text-[12px] text-[var(--pos-ink-3)]">
+                                {money(unapplied)} not applied to any bill
+                            </span>
+                        )}
+                        <Button
+                            variant="primary"
+                            icon={Check}
+                            loading={saving}
+                            disabled={!!problem || !mayPay}
+                            onClick={save}
+                        >
+                            Save payment
+                        </Button>
+                    </div>
+                </div>
+            </PageBody>
+        </Page>
+    );
 }

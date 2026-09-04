@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 544" width="640" height="544" role="img" aria-label="AVS ECOM HUB">
+  <title>AVS ECOM HUB</title>
+  <!--
+    Brand mark — knockout variant for dark surfaces (sidebar, sign-in panel).
+    artwork: rounded badge, the A peak, the V that forms the cart basket, the base
+    rail and wheels, the orange S figure with the diamond above it, and the globe
+    with a cursor.
+
+    This is a STAND-IN. Save the original file over it as `mark.png` (or replace
+    this `mark.svg`) and nothing else in the app changes — every screen draws the
+    logo through components/pos/brand.jsx.
+  -->
+  <defs>
+    <linearGradient id="avsO" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#EE3A24"/>
+      <stop offset="1" stop-color="#F7941D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- badge -->
+  <rect x="9" y="9" width="622" height="526" rx="46" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="15"/>
+
+  <g fill="none" stroke="#FFFFFF" stroke-width="74" stroke-linejoin="miter" stroke-miterlimit="8">
+    <!-- A — tall peak, long right leg running down into the cart -->
+    <path d="M104 214 L190 54 L324 372"/>
+    <!-- V — the cart basket -->
+    <path d="M290 148 L402 424 L488 258"/>
+  </g>
+
+  <g fill="#FFFFFF">
+    <!-- base rail -->
+    <rect x="396" y="374" width="188" height="52" rx="6"/>
+    <!-- wheels -->
+    <circle cx="360" cy="462" r="33"/>
+    <circle cx="520" cy="462" r="33"/>
+    <!-- cursor over the globe -->
+    <path d="M136 380 L196 428 L168 434 L182 466 L160 476 L146 442 L128 458 Z"/>
+  </g>
+
+  <g fill="url(#avsO)">
+    <!-- diamond dropping in -->
+    <rect x="464" y="62" width="76" height="76" rx="7" transform="rotate(45 502 100)"/>
+    <!-- S figure inside the basket -->
+    <path d="M486 152
+             c-42-12-88 4-100 40
+             c-11 34 10 66 46 76
+             l40 11
+             l-72 121
+             h84
+             l78-132
+             c22-38 6-84-34-104
+             c-13-6-27-10-42-12
+             Z
+             M444 232
+             c-14-4-22-15-19-26
+             c3-11 16-17 30-14
+             c14 4 22 15 19 26
+             c-3 11-16 17-30 14
+             Z"/>
+  </g>
+
+  <!-- globe -->
+  <g fill="none" stroke="url(#avsO)" stroke-width="17" stroke-linecap="round">
+    <circle cx="126" cy="326" r="79"/>
+    <ellipse cx="126" cy="326" rx="33" ry="79"/>
+    <path d="M50 300 H202 M50 352 H202"/>
+  </g>
+</svg>

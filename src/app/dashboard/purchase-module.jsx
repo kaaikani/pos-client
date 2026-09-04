@@ -1,357 +1,622 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
-import { ListPurchasesQuery, CreatePurchaseCommand, DeletePurchaseCommand, ListItemsQuery } from '../../core/queries/pharma.query';
+/**
+ * Purchase — list-first record module with an item-entry grid.
+ *
+ * This screen defines the GRID pattern that Purchase Return, Sales Return and POS
+ * billing all reuse:
+ *   · a row is added by picking an item, never by typing a blank row first
+ *   · Enter walks across the cells and creates the next row at the end
+ *   · line maths (discount → taxable → tax → amount) lives in one function
+ *   · totals are derived, never stored in component state
+ *
+ * It also absorbs the old separate "Purchase List" screen — a list of purchases is
+ * this module's landing view, not a different page.
+ */
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import {
+    ShoppingCart, Plus, Save, Trash2, RefreshCw, X, Search, Package, FileText, ChevronDown,
+} from 'lucide-react';
+import {
+    ListPurchasesQuery, CreatePurchaseCommand, DeletePurchaseCommand, ListItemsQuery,
+} from '../../core/queries/pharma.query';
+import {
+    Page, PageHeader, PageBody, ActionBar, HeaderStat, ListToolbar, FormHeader, FormSection,
+    FormGrid, Field, Input, Select, Button, DataTable, Banner, EmptyState, Badge, TotalsPanel,
+    ShortcutHints, useConfirm, money,
+} from '../../components/pos';
+
+const today = () => new Date().toISOString().split('T')[0];
+const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+
+const PAY_TYPES = ['Cash', 'Credit', 'UPI', 'Card', 'Cheque'];
+const TAX_MODES = ['Exclusive', 'Inclusive'];
+
+const blankRow = () => ({
+    itemCode: '', itemName: '', batchNo: '', expiry: '',
+    qty: '', free: '', puRate: '', mrp: '', saleRate: '', discPct: '', taxPct: '',
+});
+
+/** One place for line maths. Returns the derived numbers — never mutates. */
+function lineMath(r, taxMode) {
+    const sub = num(r.qty) * num(r.puRate);
+    const discAmt = sub * num(r.discPct) / 100;
+    const taxable = sub - discAmt;
+    const tax = taxable * num(r.taxPct) / 100;
+    // Inclusive means the purchase rate already carries the tax, so it is not added again.
+    const amount = taxMode === 'Inclusive' ? taxable : taxable + tax;
+    return { sub, discAmt, taxable, tax, amount };
+}
 
 export default function PurchaseModule() {
+    const confirm = useConfirm();
+
     const [purchases, setPurchases] = useState([]);
-    const [pharmaItems, setPharmaItems] = useState([]);
-    const [selectedIdx, setSelectedIdx] = useState(-1);
+    const [items, setItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [banner, setBanner] = useState(null);
 
-    // Header form
-    const purNoRef = useRef(null);
-    const [purNo, setPurNo] = useState('0');
-    const [purDate, setPurDate] = useState(new Date().toISOString().split('T')[0]);
-    const [invNo, setInvNo] = useState('');
-    const [invDate, setInvDate] = useState(new Date().toISOString().split('T')[0]);
-    const [taxMode, setTaxMode] = useState('Exclusive');
-    const [type, setType] = useState('Cash');
-    const [otherState, setOtherState] = useState(false);
-    const [supplier, setSupplier] = useState('');
-    const [orderRef, setOrderRef] = useState('');
-    const [transMode, setTransMode] = useState('');
-    const [address, setAddress] = useState('');
-    const [transportName, setTransportName] = useState('');
+    const [view, setView] = useState('list');
+    const [search, setSearch] = useState('');
+    const [selectedId, setSelectedId] = useState(null);
+    const [readOnly, setReadOnly] = useState(false);   // viewing a saved purchase
 
-    const [rows, setRows] = useState([]);
-
-    // Item search popup
-    const [showItemSearch, setShowItemSearch] = useState(false);
-    const [itemSearchText, setItemSearchText] = useState('');
-    const [currentRowIdx, setCurrentRowIdx] = useState(-1);
-    const [searchSelIdx, setSearchSelIdx] = useState(0);
-    const searchRef = useRef(null);
-
-    useEffect(() => { loadAll(); }, []);
-    const loadAll = async () => {
-        try {
-            const [p, items] = await Promise.all([ new ListPurchasesQuery().execute(), new ListItemsQuery().execute() ]);
-            setPurchases(p);
-            setPharmaItems(items);
-            setPurNo(p.length === 0 ? '0' : String(p.length));
-        } catch (e) { console.error(e); }
-    };
-
-    // ── Hotkeys ──
-    useEffect(() => {
-        const handler = (e) => {
-            if (e.key === 'F4') { e.preventDefault(); handleCancel(); return; }
-            if (e.key === 'F7') { e.preventDefault(); alert('Redirect to Item Master'); return; }
-            if (e.key === 'F1') { e.preventDefault(); handleSave(); return; }
-            if (showItemSearch) {
-                if (e.key === 'Escape') { e.preventDefault(); setShowItemSearch(false); return; }
-                if (e.key === 'ArrowDown') { e.preventDefault(); setSearchSelIdx(p => Math.min(p+1, filteredItems.length-1)); return; }
-                if (e.key === 'ArrowUp') { e.preventDefault(); setSearchSelIdx(p => Math.max(p-1, 0)); return; }
-                if (e.key === 'Enter') { e.preventDefault(); pickItem(filteredItems[searchSelIdx]); return; }
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [showItemSearch, searchSelIdx, rows, currentRowIdx]);
-
-    const blankRow = () => ({ company: '', group: '', itemCode: '', itemName: '', batchNo: '', mfg: '', expiry: '', qty: '', free: '', mrp: '', puRate: '', saleRate: '', amount: '0.00', discPct: '', discAmt: '', taxPct: '' });
-
-    const addRow = () => setRows(prev => [...prev, blankRow()]);
-
-    const updateRow = (idx, field, val) => {
-        setRows(prev => prev.map((r, i) => {
-            if (i !== idx) return r;
-            const u = { ...r, [field]: val };
-            const qty = parseFloat(u.qty) || 0;
-            const rate = parseFloat(u.puRate) || 0;
-            const disc = parseFloat(u.discPct) || 0;
-            const sub = qty * rate;
-            const discA = sub * disc / 100;
-            u.discAmt = discA.toFixed(2);
-            const taxable = sub - discA;
-            const tax = taxable * (parseFloat(u.taxPct) || 0) / 100;
-            u.amount = (taxable + (taxMode === 'Exclusive' ? tax : 0)).toFixed(2);
-            return u;
-        }));
-    };
-
-    const openItemSearch = (rowIdx) => {
-        setCurrentRowIdx(rowIdx); setItemSearchText(''); setSearchSelIdx(0); setShowItemSearch(true);
-        setTimeout(() => searchRef.current?.focus(), 50);
-    };
-
-    const pickItem = (item) => {
-        if (!item) return;
-        let idx = currentRowIdx;
-        setRows(prev => {
-            let nr = [...prev];
-            while (nr.length <= idx) nr.push(blankRow());
-            nr[idx] = { ...nr[idx],
-                itemCode: item.code, itemName: item.itemName,
-                group: item.category || 'Na', company: item.brand || '',
-                mrp: item.mrpRate || '0.00', puRate: item.costRate || '0.00',
-                saleRate: item.salesRate || '0.00',
-                taxPct: (item.taxName || 'GST 5%').replace(/[^0-9]/g, '') || '5',
-            };
-            return nr;
-        });
-        setShowItemSearch(false);
-    };
-
-    const filteredItems = pharmaItems.filter(it => {
-        if (!itemSearchText) return true;
-        const s = itemSearchText.toLowerCase();
-        return (it.itemName || '').toLowerCase().includes(s) || String(it.code).includes(s);
+    // header
+    const [hdr, setHdr] = useState({
+        purNo: '', purDate: today(), invNo: '', invDate: today(),
+        taxMode: 'Exclusive', payType: 'Cash', otherState: false,
+        supplier: '', address: '', orderRef: '', transMode: '', transportName: '',
     });
+    const [rows, setRows] = useState([]);
+    const [showMoreHdr, setShowMoreHdr] = useState(false);
 
-    const totalAmount = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const totalDiscA = rows.reduce((s, r) => s + (parseFloat(r.discAmt) || 0), 0);
-    const totalTax = rows.reduce((s, r) => {
-        const sub = (parseFloat(r.qty)||0) * (parseFloat(r.puRate)||0);
-        const discA = sub * (parseFloat(r.discPct)||0) / 100;
-        return s + (sub - discA) * (parseFloat(r.taxPct)||0) / 100;
-    }, 0);
+    // item picker
+    const [picker, setPicker] = useState(null);        // { rowIdx } | null
+    const [pickerText, setPickerText] = useState('');
+    const [pickerSel, setPickerSel] = useState(0);
+    const pickerRef = useRef(null);
+    const gridRef = useRef(null);
 
-    const handleAdd = () => {
-        setPurNo(String(purchases.length));
-        setInvNo(''); setSupplier(''); setAddress(''); setOrderRef('');
-        setTransMode(''); setTransportName(''); setRows([]);
-        setSelectedIdx(-1);
-    };
+    const setH = useCallback((k, v) => setHdr(p => ({ ...p, [k]: v })), []);
 
-    const handleSave = async () => {
-        if (!supplier.trim()) return alert('Supplier is required.');
-        if (!rows.some(r => r.itemName)) return alert('Add at least one item.');
+    /* ── data ───────────────────────────────────────────── */
+
+    const loadAll = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [pl, il] = await Promise.all([
+                new ListPurchasesQuery().execute(),
+                new ListItemsQuery().execute().catch(() => []),
+            ]);
+            setPurchases(pl || []);
+            setItems(il || []);
+        } catch (e) {
+            setBanner({ tone: 'danger', text: `Could not load purchases: ${e.message}` });
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { loadAll(); }, [loadAll]);
+
+    /* ── list ───────────────────────────────────────────── */
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return purchases;
+        return purchases.filter(p =>
+            [p.purNo, p.invNo, p.supplier, p.orderRef].some(f => String(f || '').toLowerCase().includes(q)));
+    }, [purchases, search]);
+
+    const totals = useMemo(() => ({
+        count: purchases.length,
+        value: purchases.reduce((s, p) => s + num(p.netAmount || p.totalAmount), 0),
+        tax: purchases.reduce((s, p) => s + num(p.totalTax), 0),
+    }), [purchases]);
+
+    const listColumns = useMemo(() => [
+        { key: 'purNo', header: 'Pur No', width: 90,
+          render: (p) => <span className="font-semibold text-[var(--pos-ink)]" style={{ fontFamily: 'var(--pos-mono)' }}>{p.purNo || '—'}</span> },
+        { key: 'purDate', header: 'Date', width: 110,
+          render: (p) => <span className="text-[var(--pos-ink-2)]">{p.purDate || '—'}</span> },
+        { key: 'supplier', header: 'Supplier',
+          render: (p) => (
+            <div className="min-w-0">
+                <div className="font-semibold truncate">{p.supplier || '—'}</div>
+                {p.address && <div className="text-[11px] text-[var(--pos-ink-3)] truncate">{p.address}</div>}
+            </div>
+          ) },
+        { key: 'invNo', header: 'Invoice', width: 120,
+          render: (p) => p.invNo || <span className="text-[var(--pos-ink-3)]">—</span> },
+        { key: 'lines', header: 'Items', width: 70, align: 'right',
+          render: (p) => (p.rows || []).length },
+        { key: 'totalTax', header: 'Tax', width: 105, align: 'right',
+          render: (p) => <span className="text-[var(--pos-ink-2)]">{money(p.totalTax)}</span> },
+        { key: 'netAmount', header: 'Net', width: 120, align: 'right',
+          render: (p) => <span className="font-bold">{money(p.netAmount || p.totalAmount)}</span> },
+        { key: 'payType', header: 'Payment', width: 100,
+          render: (p) => <Badge tone={p.payType === 'Credit' ? 'warn' : 'neutral'}>{p.payType || '—'}</Badge> },
+    ], []);
+
+    /* ── grid ───────────────────────────────────────────── */
+
+    const derived = useMemo(() => rows.map(r => lineMath(r, hdr.taxMode)), [rows, hdr.taxMode]);
+    const grand = useMemo(() => derived.reduce((a, d) => ({
+        sub: a.sub + d.sub, disc: a.disc + d.discAmt, taxable: a.taxable + d.taxable,
+        tax: a.tax + d.tax, amount: a.amount + d.amount,
+    }), { sub: 0, disc: 0, taxable: 0, tax: 0, amount: 0 }), [derived]);
+
+    const setRow = useCallback((i, k, v) => {
+        setRows(prev => prev.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
+    }, []);
+
+    const removeRow = useCallback((i) => setRows(prev => prev.filter((_, n) => n !== i)), []);
+
+    const openPicker = useCallback((rowIdx) => {
+        setPicker({ rowIdx });
+        setPickerText('');
+        setPickerSel(0);
+        setTimeout(() => pickerRef.current?.focus(), 30);
+    }, []);
+
+    const pickerResults = useMemo(() => {
+        const q = pickerText.trim().toLowerCase();
+        const base = q
+            ? items.filter(it => [it.itemName, it.code, it.barcode, it.brand]
+                .some(f => String(f || '').toLowerCase().includes(q)))
+            : items;
+        return base.slice(0, 60);
+    }, [items, pickerText]);
+
+    const choose = useCallback((it) => {
+        if (!it || !picker) return;
+        const line = {
+            ...blankRow(),
+            itemCode: it.code,
+            itemName: it.itemName,
+            puRate: it.purchaseRate ? String(it.purchaseRate) : '',
+            mrp: it.mrpRate ? String(it.mrpRate) : '',
+            saleRate: it.salesRate ? String(it.salesRate) : '',
+            taxPct: String(num(it.gstPercent) || 5),
+            qty: '1',
+        };
+        setRows(prev => {
+            const next = [...prev];
+            if (picker.rowIdx === null || picker.rowIdx >= next.length) next.push(line);
+            else next[picker.rowIdx] = { ...next[picker.rowIdx], ...line };
+            return next;
+        });
+        setPicker(null);
+        // land on the qty cell of the row just filled
+        setTimeout(() => {
+            const idx = picker.rowIdx === null ? rows.length : picker.rowIdx;
+            gridRef.current?.querySelector(`[data-cell="qty-${idx}"]`)?.focus();
+        }, 30);
+    }, [picker, rows.length]);
+
+    // Enter/Tab across grid cells; Enter on the last cell of the last row adds a row.
+    const CELL_ORDER = ['qty', 'free', 'puRate', 'discPct', 'taxPct', 'mrp', 'saleRate'];
+    const cellKeyDown = useCallback((e, rowIdx, cell) => {
+        if (e.key === 'Escape') { e.currentTarget.blur(); return; }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const ci = CELL_ORDER.indexOf(cell);
+        const dir = e.shiftKey ? -1 : 1;
+        const nextCi = ci + dir;
+        if (nextCi >= 0 && nextCi < CELL_ORDER.length) {
+            gridRef.current?.querySelector(`[data-cell="${CELL_ORDER[nextCi]}-${rowIdx}"]`)?.focus();
+            return;
+        }
+        if (dir > 0) {
+            if (rowIdx + 1 < rows.length) {
+                gridRef.current?.querySelector(`[data-cell="qty-${rowIdx + 1}"]`)?.focus();
+            } else {
+                openPicker(null);           // end of the last row → add the next item
+            }
+        } else if (rowIdx > 0) {
+            gridRef.current?.querySelector(`[data-cell="${CELL_ORDER[CELL_ORDER.length - 1]}-${rowIdx - 1}"]`)?.focus();
+        }
+    }, [rows.length, openPicker]);
+
+    /* ── open / save / delete ───────────────────────────── */
+
+    const openNew = useCallback(() => {
+        setHdr({
+            purNo: String(purchases.length + 1), purDate: today(), invNo: '', invDate: today(),
+            taxMode: 'Exclusive', payType: 'Cash', otherState: false,
+            supplier: '', address: '', orderRef: '', transMode: '', transportName: '',
+        });
+        setRows([]);
+        setReadOnly(false);
+        setShowMoreHdr(false);
+        setBanner(null);
+        setView('form');
+        setTimeout(() => openPicker(null), 60);
+    }, [purchases.length, openPicker]);
+
+    const openRecord = useCallback((p) => {
+        setHdr({
+            purNo: p.purNo || '', purDate: p.purDate || today(), invNo: p.invNo || '', invDate: p.invDate || today(),
+            taxMode: p.taxMode || 'Exclusive', payType: p.payType || 'Cash', otherState: !!p.otherState,
+            supplier: p.supplier || '', address: p.address || '', orderRef: p.orderRef || '',
+            transMode: p.transMode || '', transportName: p.transportName || '',
+        });
+        setRows((p.rows || []).map(r => ({ ...blankRow(), ...r })));
+        setReadOnly(true);
+        setBanner(null);
+        setView('form');
+    }, []);
+
+    const backToList = useCallback(() => { setView('list'); setBanner(null); }, []);
+
+    const handleSave = useCallback(async () => {
+        if (!hdr.supplier.trim()) { setBanner({ tone: 'warn', text: 'Supplier is required.' }); return; }
+        const valid = rows.filter(r => r.itemCode && num(r.qty) > 0);
+        if (!valid.length) { setBanner({ tone: 'warn', text: 'Add at least one item with a quantity above 0.' }); return; }
+        const noRate = valid.find(r => !(num(r.puRate) > 0));
+        if (noRate) { setBanner({ tone: 'warn', text: `"${noRate.itemName}" needs a purchase rate above 0.` }); return; }
+
+        setSaving(true);
         try {
             await new CreatePurchaseCommand().execute({
-                purNo, purDate, invNo, invDate, taxMode, payType: type, otherState,
-                supplier, orderRef, transMode, address, transportName,
-                rows, totalAmount, totalDiscA, totalTax, netAmount: totalAmount,
+                purNo: hdr.purNo, purDate: hdr.purDate, invNo: hdr.invNo, invDate: hdr.invDate,
+                taxMode: hdr.taxMode, payType: hdr.payType, otherState: hdr.otherState,
+                supplier: hdr.supplier.trim(), orderRef: hdr.orderRef,
+                transMode: hdr.transMode, address: hdr.address, transportName: hdr.transportName,
+                rows: valid.map(r => {
+                    const d = lineMath(r, hdr.taxMode);
+                    return {
+                        itemCode: r.itemCode, itemName: r.itemName,
+                        batchNo: r.batchNo || '', expiry: r.expiry || '',
+                        qty: num(r.qty), freeQty: num(r.free),
+                        puRate: num(r.puRate), mrpRate: num(r.mrp), sellingRate: num(r.saleRate),
+                        discountPct: num(r.discPct), taxPct: num(r.taxPct),
+                        amount: d.amount,
+                    };
+                }),
+                totalAmount: grand.amount, totalDiscA: grand.disc, totalTax: grand.tax,
+                netAmount: grand.amount,
             });
             await loadAll();
-            handleAdd();
-            alert('Purchase saved.');
-        } catch (err) { alert(err.message); }
-    };
+            setView('list');
+            setBanner({ tone: 'ok', text: `Purchase ${hdr.purNo} saved — ${money(grand.amount)} from ${hdr.supplier.trim()}.` });
+        } catch (err) {
+            setBanner({ tone: 'danger', text: err.message });
+        } finally {
+            setSaving(false);
+        }
+    }, [hdr, rows, grand, loadAll]);
 
-    const handleDelete = async () => {
-        if (selectedIdx < 0) return alert('No purchase selected.');
-        const p = purchases[selectedIdx];
-        if (!p?.id) return;
-        if (!confirm('Delete this purchase?')) return;
-        try { await new DeletePurchaseCommand().execute(p.id); await loadAll(); handleAdd(); } catch (err) { alert(err.message); }
-    };
+    const handleDelete = useCallback(async (rec) => {
+        const p = rec || purchases.find(x => x.id === selectedId);
+        if (!p) { setBanner({ tone: 'warn', text: 'Select a purchase first.' }); return; }
+        const ok = await confirm({
+            title: 'Delete purchase?',
+            message: `${p.purNo} — ${p.supplier}\n${money(p.netAmount || p.totalAmount)}\n\nStock received on this bill will be reversed. This cannot be undone.`,
+            confirmLabel: 'Delete', tone: 'danger',
+        });
+        if (!ok) return;
+        try {
+            await new DeletePurchaseCommand().execute(p.id);
+            await loadAll();
+            setSelectedId(null);
+            setView('list');
+            setBanner({ tone: 'ok', text: `Purchase ${p.purNo} deleted.` });
+        } catch (err) {
+            setBanner({ tone: 'danger', text: err.message });
+        }
+    }, [purchases, selectedId, confirm, loadAll]);
 
-    const handleCancel = () => { if (confirm('Cancel current entry?')) handleAdd(); };
+    /* ── item picker overlay ────────────────────────────── */
 
-    const nav = (dir) => {
-        if (purchases.length === 0) return;
-        let idx = selectedIdx;
-        if (dir === 'first') idx = 0;
-        else if (dir === 'last') idx = purchases.length - 1;
-        else if (dir === 'prev') idx = Math.max(0, selectedIdx - 1);
-        else if (dir === 'next') idx = Math.min(purchases.length - 1, selectedIdx + 1);
-        setSelectedIdx(idx);
-        const p = purchases[idx];
-        setPurNo(p.purNo); setPurDate(p.purDate); setInvNo(p.invNo); setInvDate(p.invDate);
-        setTaxMode(p.taxMode); setType(p.type); setOtherState(p.otherState);
-        setSupplier(p.supplier); setOrderRef(p.orderRef); setTransMode(p.transMode);
-        setAddress(p.address); setTransportName(p.transportName); setRows(p.rows);
-    };
-
-    // Table column widths
-    const cols = [
-        { key: 'company', label: 'Company', w: 130 },
-        { key: 'group', label: 'Group', w: 90 },
-        { key: 'itemName', label: 'It...', w: 44 },
-        { key: 'batchNo', label: 'BatchNo', w: 90 },
-        { key: 'mfg', label: 'MFG', w: 80 },
-        { key: 'expiry', label: 'Expiry', w: 80 },
-        { key: 'qty', label: 'QTY', w: 60 },
-        { key: 'free', label: 'Free', w: 60 },
-        { key: 'mrp', label: 'MRP', w: 70 },
-        { key: 'puRate', label: 'PuRate', w: 72 },
-        { key: 'saleRate', label: 'SaleRate', w: 75 },
-        { key: 'amount', label: 'Amount', w: 80 },
-        { key: 'discPct', label: 'Disc%', w: 60 },
-        { key: 'discAmt', label: 'DiscA...', w: 70 },
-        { key: 'taxPct', label: 'Tax%', w: 58 },
-    ];
-
-    const cellStyle = "bg-white h-[22px] px-1 text-[11px] font-bold text-slate-900 outline-none border-r border-[#aec6d6] focus:bg-yellow-50";
-    const topInp = "bg-white border border-[#7ba0b5] h-[20px] px-1 text-[11px] font-bold text-slate-900 outline-none focus:bg-yellow-50 focus:border-[#1a5276]";
-
-    return (<div className="flex flex-col h-[85vh] rounded-md overflow-hidden font-sans shadow-xl border border-slate-400" style={{ background: '#d4e6f1' }}>
-        {/* Title bar */}
-        <div className="h-[22px] flex items-center px-2 shrink-0 bg-gradient-to-r from-[#1a5276] to-[#2980b9] border-b border-[#154360] relative">
-            <span className="text-white text-[11px] font-bold">Purchase - AVS ECOM PRIVATE LIMITED 2026-2027</span>
-            <button className="absolute right-1 top-0 text-white hover:bg-red-500 w-6 h-[20px] flex items-center justify-center"><X size={12}/></button>
-        </div>
-
-        {/* Header form rows */}
-        <div className="shrink-0 py-1" style={{ background: '#d4e6f1' }}>
-            {/* Row 1: PurNo | PurDate | Inv.No | InvDate | Supplier | Address */}
-            <div className="flex items-center px-1 py-0.5 gap-2 text-[11px] font-bold border-b border-[#b0c4d0]">
-                <label className="w-12">PurNo</label>
-                <input ref={purNoRef} autoFocus type="text" value={purNo} onChange={e=>setPurNo(e.target.value)} className={`${topInp} w-16`}/>
-                <label className="ml-1 w-14">PurDate</label>
-                <input type="date" value={purDate} onChange={e=>setPurDate(e.target.value)} className={`${topInp} w-[115px]`}/>
-                <label className="ml-3 w-12">Inv.No</label>
-                <input type="text" value={invNo} onChange={e=>setInvNo(e.target.value)} className={`${topInp} w-32`}/>
-                <label className="ml-1 w-14">InvDate</label>
-                <input type="date" value={invDate} onChange={e=>setInvDate(e.target.value)} className={`${topInp} w-[115px]`}/>
-                <label className="ml-3 w-16">Supplier</label>
-                <input type="text" value={supplier} onChange={e=>setSupplier(e.target.value)} className={`${topInp} flex-1`}/>
-                <label className="ml-2 w-14">Address</label>
-                <input type="text" value={address} onChange={e=>setAddress(e.target.value)} className={`${topInp} flex-1`}/>
-            </div>
-            {/* Row 2: Radio buttons | Type | Other State | Cash label | Order Ref | Trans.Mode | Transport Name */}
-            <div className="flex items-center px-1 py-0.5 gap-2 text-[11px] font-bold">
-                <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="tm" checked={taxMode==='Exclusive'} onChange={()=>setTaxMode('Exclusive')}/>Exclusive</label>
-                <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="tm" checked={taxMode==='Inclusive'} onChange={()=>setTaxMode('Inclusive')}/>Inclusive</label>
-                <label className="ml-2">Type</label>
-                <select value={type} onChange={e=>setType(e.target.value)} className={`${topInp} w-20`}>
-                    <option>Cash</option><option>Credit</option><option>Bank</option>
-                </select>
-                <label className="flex items-center gap-1 cursor-pointer ml-3"><input type="checkbox" checked={otherState} onChange={e=>setOtherState(e.target.checked)}/>Other State <span className="text-red-500 text-[9px]">ⓘ</span></label>
-                <span className="ml-10 font-bold">{type}</span>
-                <label className="ml-6 w-16">Order Ref</label>
-                <input type="text" value={orderRef} onChange={e=>setOrderRef(e.target.value)} className={`${topInp} w-32`}/>
-                <label className="ml-2 w-20">Trans.Mode</label>
-                <input type="text" value={transMode} onChange={e=>setTransMode(e.target.value)} className={`${topInp} w-28`}/>
-                <label className="ml-2 w-28">Transport Name</label>
-                <input type="text" value={transportName} onChange={e=>setTransportName(e.target.value)} className={`${topInp} flex-1`}/>
+    const pickerOverlay = picker && (
+        <div className="fixed inset-0 z-[90] grid place-items-start justify-center pt-[10vh] bg-[rgba(16,28,33,.45)] p-4"
+             role="dialog" aria-modal="true"
+             onMouseDown={(e) => { if (e.target === e.currentTarget) setPicker(null); }}>
+            <div className="w-full max-w-[620px] bg-[var(--pos-surface)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow-lg)] overflow-hidden flex flex-col max-h-[70vh]">
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--pos-line)]">
+                    <Search size={15} className="text-[var(--pos-ink-3)] shrink-0" />
+                    <input
+                        ref={pickerRef}
+                        value={pickerText}
+                        onChange={e => { setPickerText(e.target.value); setPickerSel(0); }}
+                        onKeyDown={e => {
+                            if (e.key === 'ArrowDown') { e.preventDefault(); setPickerSel(s => Math.min(pickerResults.length - 1, s + 1)); }
+                            else if (e.key === 'ArrowUp') { e.preventDefault(); setPickerSel(s => Math.max(0, s - 1)); }
+                            else if (e.key === 'Enter') { e.preventDefault(); choose(pickerResults[pickerSel]); }
+                            else if (e.key === 'Escape') { e.preventDefault(); setPicker(null); }
+                        }}
+                        placeholder="Search item by name, code or barcode…"
+                        className="flex-1 h-8 bg-transparent outline-none text-[13.5px] font-medium text-[var(--pos-ink)] placeholder:text-[var(--pos-ink-3)]"
+                    />
+                    <button onClick={() => setPicker(null)} aria-label="Close"
+                        className="pos-focusable grid place-items-center w-6 h-6 rounded text-[var(--pos-ink-3)] hover:bg-[var(--pos-sunk)]"><X size={14} /></button>
+                </div>
+                <div className="pos-scroll flex-1 min-h-0">
+                    {pickerResults.length === 0 ? (
+                        <EmptyState icon={Package} title="No matching item" hint="Add it in Item first, then come back." />
+                    ) : pickerResults.map((it, i) => (
+                        <button key={it.id} type="button"
+                            onMouseEnter={() => setPickerSel(i)}
+                            onClick={() => choose(it)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-left border-b border-[var(--pos-line-soft)] ${i === pickerSel ? 'bg-[var(--pos-select)]' : 'hover:bg-[var(--pos-hover)]'}`}>
+                            <span className="w-[70px] shrink-0 text-[11.5px] font-semibold text-[var(--pos-ink-2)]" style={{ fontFamily: 'var(--pos-mono)' }}>{it.code}</span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block text-[13px] font-semibold text-[var(--pos-ink)] truncate">{it.itemName}</span>
+                                {(it.brand || it.unit) && <span className="block text-[11px] text-[var(--pos-ink-3)] truncate">{[it.brand, it.unit].filter(Boolean).join(' · ')}</span>}
+                            </span>
+                            <span className="shrink-0 text-[12px] text-[var(--pos-ink-2)] tabular-nums" style={{ fontFamily: 'var(--pos-mono)' }}>{money(it.purchaseRate)}</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="px-3 py-2 bg-[var(--pos-sunk)] border-t border-[var(--pos-line)]">
+                    <ShortcutHints items={[['↑ ↓', 'move'], ['Enter', 'add to bill'], ['Esc', 'close']]} />
+                </div>
             </div>
         </div>
+    );
 
-        {/* Table area + right totals */}
-        <div className="flex-1 flex overflow-hidden border-t border-[#7ba0b5] bg-white">
-            {/* Main table */}
-            <div className="flex-1 overflow-auto relative">
-                <table className="w-full text-[11px] border-collapse">
-                    <thead className="bg-[#d4e6f1] sticky top-0 z-10">
-                        <tr>
-                            <th className="w-7 border-r border-b border-[#7ba0b5] font-bold py-1"></th>
-                            {cols.map(c => (<th key={c.key} className="border-r border-b border-[#7ba0b5] text-slate-900 text-[11px] font-bold py-1" style={{width: c.w}}>{c.label}</th>))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((r, i) => (<tr key={i} className="border-b border-[#dde5ec] h-[22px]">
-                            <td className="w-7 text-center text-[#2980b9] text-[11px] font-black border-r border-[#dde5ec]">{i === rows.length-1 ? '▶*' : ''}</td>
-                            {cols.map(c => (<td key={c.key} className="p-0 border-r border-[#dde5ec]">
-                                {c.key === 'itemName' ? (
-                                    <input type="text" value={r.itemName || ''} onFocus={()=>openItemSearch(i)} readOnly className={`${cellStyle} cursor-pointer bg-[#eaf5fb]`} style={{width: c.w}} title="Click to search item"/>
-                                ) : (
-                                    <input type="text" value={r[c.key] || ''} onChange={e=>updateRow(i, c.key, e.target.value)} className={cellStyle} style={{width: c.w, textAlign: ['qty','free','mrp','puRate','saleRate','amount','discPct','discAmt','taxPct'].includes(c.key) ? 'right' : 'left'}}/>
+    /* ── render: FORM ───────────────────────────────────── */
+
+    if (view === 'form') {
+        const cellCls = 'w-full h-[26px] px-2 text-[12.5px] font-medium text-right tabular-nums bg-transparent outline-none focus:bg-[var(--pos-field-focus)] focus:ring-1 focus:ring-[var(--pos-ink-3)] rounded-sm disabled:text-[var(--pos-ink-3)]';
+
+        return (
+            <Page>
+                <FormHeader
+                    onBack={backToList}
+                    title={readOnly ? `Purchase ${hdr.purNo}` : 'New Purchase'}
+                    subtitle={readOnly ? `${hdr.supplier} · ${hdr.purDate}` : 'Record goods received from a supplier'}
+                    badge={readOnly ? <Badge tone="neutral">Saved</Badge> : <Badge tone="ok">Draft</Badge>}
+                    actions={<>
+                        {readOnly
+                            ? <Button variant="danger" icon={Trash2}
+                                onClick={() => handleDelete(purchases.find(p => p.purNo === hdr.purNo))}>Delete</Button>
+                            : <>
+                                <Button variant="default" icon={X} onClick={backToList}>Cancel</Button>
+                                <Button variant="primary" icon={Save} loading={saving} onClick={handleSave}>Save Purchase</Button>
+                              </>}
+                    </>}
+                />
+                {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
+
+                <PageBody>
+                    <div className="max-w-[1240px] mx-auto flex flex-col gap-4">
+
+                        <div className="bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] px-5 py-4">
+                            <FormSection title="Supplier & Invoice">
+                                <FormGrid cols={4}>
+                                    <Field label="Supplier" required span={2}>
+                                        <Input value={hdr.supplier} disabled={readOnly}
+                                            onChange={e => setH('supplier', e.target.value)} placeholder="Supplier name" autoComplete="off" />
+                                    </Field>
+                                    <Field label="Purchase No">
+                                        <Input value={hdr.purNo} disabled={readOnly} onChange={e => setH('purNo', e.target.value)} />
+                                    </Field>
+                                    <Field label="Purchase Date">
+                                        <Input type="date" value={hdr.purDate} disabled={readOnly} onChange={e => setH('purDate', e.target.value)} />
+                                    </Field>
+
+                                    <Field label="Supplier Invoice No">
+                                        <Input value={hdr.invNo} disabled={readOnly} onChange={e => setH('invNo', e.target.value)} autoComplete="off" />
+                                    </Field>
+                                    <Field label="Invoice Date">
+                                        <Input type="date" value={hdr.invDate} disabled={readOnly} onChange={e => setH('invDate', e.target.value)} />
+                                    </Field>
+                                    <Field label="Tax Mode" hint="Inclusive = rate already has tax">
+                                        <Select value={hdr.taxMode} disabled={readOnly} onChange={e => setH('taxMode', e.target.value)}>
+                                            {TAX_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </Select>
+                                    </Field>
+                                    <Field label="Payment">
+                                        <Select value={hdr.payType} disabled={readOnly} onChange={e => setH('payType', e.target.value)}>
+                                            {PAY_TYPES.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </Select>
+                                    </Field>
+                                </FormGrid>
+
+                                <button type="button" onClick={() => setShowMoreHdr(v => !v)}
+                                    className="pos-focusable mt-3.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--pos-ink-2)] hover:text-[var(--pos-ink)]">
+                                    Address & transport
+                                    <ChevronDown size={13} className={showMoreHdr ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                                </button>
+                                {showMoreHdr && (
+                                    <FormGrid cols={4} className="mt-3">
+                                        <Field label="Address" span={2}>
+                                            <Input value={hdr.address} disabled={readOnly} onChange={e => setH('address', e.target.value)} />
+                                        </Field>
+                                        <Field label="Order Ref">
+                                            <Input value={hdr.orderRef} disabled={readOnly} onChange={e => setH('orderRef', e.target.value)} />
+                                        </Field>
+                                        <Field label="Transporter">
+                                            <Input value={hdr.transportName} disabled={readOnly} onChange={e => setH('transportName', e.target.value)} />
+                                        </Field>
+                                        <Field label="Transport Mode">
+                                            <Input value={hdr.transMode} disabled={readOnly} onChange={e => setH('transMode', e.target.value)} />
+                                        </Field>
+                                        <Field label="Inter-state" hint="Charges IGST instead of CGST+SGST">
+                                            <label className="flex items-center gap-2 h-[32px] text-[12.5px] font-medium text-[var(--pos-ink-2)] cursor-pointer">
+                                                <input type="checkbox" className="pos-focusable accent-[var(--pos-ink-2)] w-3.5 h-3.5"
+                                                    checked={hdr.otherState} disabled={readOnly}
+                                                    onChange={e => setH('otherState', e.target.checked)} />
+                                                Supplier is in another state
+                                            </label>
+                                        </Field>
+                                    </FormGrid>
                                 )}
-                            </td>))}
-                        </tr>))}
-                        {/* Empty row for new entry */}
-                        <tr onClick={addRow} className="cursor-pointer hover:bg-blue-50 h-[22px] border-b border-[#dde5ec]">
-                            <td className="w-7 text-center text-[#2980b9] text-[11px] font-black border-r border-[#dde5ec]">▶*</td>
-                            <td colSpan={cols.length} className="text-[10px] text-slate-600 px-2 font-bold">Click to add row</td>
-                        </tr>
-                    </tbody>
-                </table>
+                            </FormSection>
+                        </div>
 
-                {/* ── Item Search Popup (appears over table) ── */}
-                {showItemSearch && (
-                    <div className="absolute top-0 left-[220px] bg-white border-[1.5px] border-[#7ba0b5] shadow-2xl z-30 w-[680px]">
-                        <table className="w-full text-[12px] border-collapse">
-                            <thead className="bg-[#eaf3f8] border-b border-[#7ba0b5]">
-                                <tr>
-                                    <th className="py-1 px-2 text-left border-r border-[#aec6d6] font-bold text-slate-900 w-24">Itemcode</th>
-                                    <th className="py-1 px-2 text-left border-r border-[#aec6d6] font-bold text-slate-900 w-28">Category</th>
-                                    <th className="py-1 px-2 text-left border-r border-[#aec6d6] font-bold text-slate-900">ItemName</th>
-                                    <th className="py-1 px-2 text-left font-bold text-slate-900 w-28">TaxName</th>
-                                </tr>
-                                <tr>
-                                    <td colSpan={4} className="p-0">
-                                        <input ref={searchRef} type="text" value={itemSearchText} onChange={e=>{setItemSearchText(e.target.value);setSearchSelIdx(0);}} placeholder="Type name or code... (↑↓ Enter Esc)" className="w-full bg-[#fafcfe] border-b border-[#aec6d6] h-6 px-2 text-[12px] font-bold text-slate-900 outline-none focus:bg-yellow-50"/>
-                                    </td>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredItems.length === 0 ? (
-                                    <tr><td colSpan={4} className="py-6 text-center text-slate-700 font-bold">No items. Press F7 to create.</td></tr>
-                                ) : filteredItems.map((it, i) => {
-                                    const active = searchSelIdx === i;
-                                    return (<tr key={it.id || i} onClick={()=>pickItem(it)} className={`cursor-pointer border-b border-[#e0e6ec] h-[22px] ${active ? 'bg-[#3498db]' : 'bg-white hover:bg-[#eaf3f8]'}`}>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e6ec] font-bold ${active?'text-white bg-[#2980b9]':'text-slate-900'}`}>{it.code}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e6ec] ${active?'text-white':'text-slate-900'}`}>{it.category || 'Na'}</td>
-                                        <td className={`py-0.5 px-2 border-r border-[#e0e6ec] font-bold uppercase ${active?'text-white':'text-slate-900'}`}>{it.itemName}</td>
-                                        <td className={`py-0.5 px-2 font-bold ${active?'text-white':'text-slate-900'}`}>{it.taxName || 'GST 5%'}</td>
-                                    </tr>);
-                                })}
-                            </tbody>
-                        </table>
+                        {/* ── item grid ── */}
+                        <div className="bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 h-[42px] border-b border-[var(--pos-line)] bg-[var(--pos-sunk)]">
+                                <h2 className="text-[12px] font-bold uppercase tracking-[.05em] text-[var(--pos-ink-2)] flex-1">
+                                    Items <span className="text-[var(--pos-ink-3)] normal-case font-medium">· {rows.length} line{rows.length === 1 ? '' : 's'}</span>
+                                </h2>
+                                {!readOnly && <Button variant="default" size="sm" icon={Plus} onClick={() => openPicker(null)}>Add Item</Button>}
+                            </div>
+
+                            <div ref={gridRef} className="pos-scroll max-h-[46vh]">
+                                <table className="pos-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: 40 }} className="text-center">#</th>
+                                            <th style={{ width: 84 }}>Code</th>
+                                            <th>Item</th>
+                                            <th style={{ width: 96 }}>Batch</th>
+                                            <th style={{ width: 118 }}>Expiry</th>
+                                            <th style={{ width: 72 }} className="text-right">Qty</th>
+                                            <th style={{ width: 62 }} className="text-right">Free</th>
+                                            <th style={{ width: 92 }} className="text-right">Rate</th>
+                                            <th style={{ width: 66 }} className="text-right">Disc%</th>
+                                            <th style={{ width: 62 }} className="text-right">Tax%</th>
+                                            <th style={{ width: 88 }} className="text-right">MRP</th>
+                                            <th style={{ width: 92 }} className="text-right">Sale Rate</th>
+                                            <th style={{ width: 104 }} className="text-right">Amount</th>
+                                            {!readOnly && <th style={{ width: 38 }} />}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows.length === 0 && (
+                                            <tr><td colSpan={readOnly ? 13 : 14} className="!h-auto !p-0">
+                                                <EmptyState icon={Package} title="No items on this purchase"
+                                                    hint="Add the items the supplier delivered. Enter on the last cell adds the next item."
+                                                    action={!readOnly && <Button variant="primary" icon={Plus} onClick={() => openPicker(null)}>Add Item</Button>} />
+                                            </td></tr>
+                                        )}
+                                        {rows.map((r, i) => {
+                                            const d = derived[i];
+                                            return (
+                                                <tr key={i}>
+                                                    <td className="text-center text-[var(--pos-ink-3)]">{i + 1}</td>
+                                                    <td><span className="text-[12px] font-semibold text-[var(--pos-ink)]" style={{ fontFamily: 'var(--pos-mono)' }}>{r.itemCode}</span></td>
+                                                    <td className="font-semibold truncate">{r.itemName}</td>
+                                                    <td className="!px-1">
+                                                        <input value={r.batchNo} disabled={readOnly} onChange={e => setRow(i, 'batchNo', e.target.value)}
+                                                            className={cellCls + ' !text-left'} />
+                                                    </td>
+                                                    <td className="!px-1">
+                                                        <input type="date" value={r.expiry} disabled={readOnly} onChange={e => setRow(i, 'expiry', e.target.value)}
+                                                            className={cellCls + ' !text-left'} />
+                                                    </td>
+                                                    {['qty', 'free', 'puRate', 'discPct', 'taxPct', 'mrp', 'saleRate'].map(cell => (
+                                                        <td key={cell} className="!px-1">
+                                                            <input data-cell={`${cell}-${i}`} type="number" step="any" min="0"
+                                                                value={r[cell === 'mrp' ? 'mrp' : cell] ?? ''} disabled={readOnly}
+                                                                onChange={e => setRow(i, cell, e.target.value)}
+                                                                onFocus={e => e.target.select()}
+                                                                onKeyDown={e => cellKeyDown(e, i, cell)}
+                                                                className={cellCls} />
+                                                        </td>
+                                                    ))}
+                                                    <td className="num font-bold">{money(d.amount)}</td>
+                                                    {!readOnly && (
+                                                        <td className="text-center">
+                                                            <button type="button" onClick={() => removeRow(i)} aria-label="Remove line"
+                                                                className="pos-focusable grid place-items-center w-6 h-6 mx-auto rounded text-[var(--pos-ink-3)] hover:text-[var(--pos-danger)] hover:bg-[var(--pos-danger-soft)]">
+                                                                <X size={13} />
+                                                            </button>
+                                                        </td>
+                                                    )}
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <TotalsPanel
+                            rows={[
+                                { label: 'Gross', value: money(grand.sub) },
+                                { label: 'Discount', value: `− ${money(grand.disc)}` },
+                                { label: 'Taxable', value: money(grand.taxable) },
+                                { label: hdr.otherState ? 'IGST' : 'CGST + SGST', value: money(grand.tax) },
+                            ]}
+                            grand={{ label: 'Net Payable', value: money(grand.amount) }}
+                        />
                     </div>
-                )}
-            </div>
+                </PageBody>
 
-            {/* Right totals column */}
-            <div className="w-16 border-l border-[#7ba0b5] bg-white">
-                <div className="h-[22px] border-b border-[#7ba0b5] bg-[#d4e6f1]"/>
-                <div className="h-[22px] flex items-center justify-end px-1 text-[11px] font-bold text-slate-900 border-b border-[#dde5ec]">00</div>
-                <div className="h-[22px] flex items-center justify-end px-1 text-[11px] font-bold text-slate-900 border-b border-[#dde5ec]">{totalDiscA.toFixed(2)}</div>
-                <div className="h-[22px] flex items-center justify-end px-1 text-[11px] font-bold text-slate-900 border-b border-[#dde5ec]">{totalTax.toFixed(2)}</div>
-            </div>
-        </div>
+                <ActionBar left={
+                    <ShortcutHints items={[['Enter', 'next cell'], ['Enter on last cell', 'add item'], ['Shift+Enter', 'back'], ['Esc', 'leave cell']]} />
+                }>
+                    {readOnly
+                        ? <Button variant="default" onClick={backToList}>Close</Button>
+                        : <>
+                            <Button variant="default" onClick={backToList}>Cancel</Button>
+                            <Button variant="primary" icon={Save} loading={saving} onClick={handleSave}>
+                                Save Purchase · {money(grand.amount)}
+                            </Button>
+                          </>}
+                </ActionBar>
 
-        {/* Bottom section */}
-        <div className="shrink-0 flex border-t border-[#7ba0b5]" style={{background:'#5dade2'}}>
-            {/* LEFT: F7 badge + Item Name label + buttons grid */}
-            <div className="flex-1 p-1.5" style={{background:'#5dade2'}}>
-                <div className="flex items-center gap-2 mb-1">
-                    <span className="bg-[#1a2530] text-white text-[11px] font-black px-1.5 py-[1px] border border-black">F7 -&gt; New Item</span>
-                    <label className="text-[#16a085] text-[13px] font-black">Item Name</label>
-                    <input type="text" className="flex-1 bg-white border border-[#888] h-[18px] px-1 text-[11px] font-bold text-slate-900 outline-none" readOnly/>
-                </div>
-                {/* Row: Add/Save/Delete/Cancel */}
-                <div className="flex items-center gap-0 mb-[2px]">
-                    <button onClick={handleAdd} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Add</button>
-                    <button onClick={handleSave} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Save</button>
-                    <button onClick={handleDelete} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Delete</button>
-                    <button onClick={handleCancel} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Cancel</button>
-                </div>
-                {/* Row: First/Prev/Nex/Last/V */}
-                <div className="flex items-center gap-0">
-                    <button onClick={()=>nav('first')} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">First</button>
-                    <button onClick={()=>nav('prev')} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Prev</button>
-                    <button onClick={()=>nav('next')} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Nex</button>
-                    <button onClick={()=>nav('last')} className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-6 py-[3px] text-[13px] active:translate-y-[1px]">Last</button>
-                    <button className="bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black px-3 py-[3px] text-[13px] active:translate-y-[1px]">V</button>
-                </div>
-            </div>
+                {pickerOverlay}
+            </Page>
+        );
+    }
 
-            {/* RIGHT: Save / F4 Cancel + totals */}
-            <div className="w-[300px] p-1.5" style={{background:'#5dade2'}}>
-                <div className="flex items-center gap-0 mb-1">
-                    <button onClick={handleSave} className="flex-1 bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black py-[3px] text-[13px] active:translate-y-[1px]">Save</button>
-                    <button onClick={handleCancel} className="flex-1 bg-[#ecf0f1] hover:bg-white border border-[#2c3e50] text-slate-900 font-black py-[3px] text-[13px] active:translate-y-[1px]">F4 : Cancel</button>
-                </div>
-                <div className="bg-white border border-[#2c3e50] text-right px-2 py-0.5 font-black text-slate-900 text-[11px]">{Math.round(totalAmount)}</div>
-                <div className="bg-white border border-[#2c3e50] border-t-0 text-right px-2 py-0.5 font-black text-slate-900 text-[11px]">0.0</div>
-                <div className="bg-white border border-[#2c3e50] border-t-0 text-right px-2 py-0.5 font-black text-slate-900 text-[11px]">0.0</div>
-            </div>
-        </div>
+    /* ── render: LIST ───────────────────────────────────── */
 
-        {/* Hotkeys legend */}
-        <div className="shrink-0 border-t border-[#7a9ca8] text-[10px] font-bold text-slate-900 bg-white">
-            <div className="bg-[#1a5276] text-white px-2 py-0.5 text-[9px] uppercase tracking-widest font-black">⌨ Hotkeys</div>
-            <div className="grid grid-cols-6 border border-[#aaa] border-t-0">
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">F1 - <u>S</u>ave</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">F4 - <u>C</u>ancel</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">F7 - Item Master</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">↑↓ Navigate</span>
-                <span className="px-2 py-0 border-r border-b border-[#aaa]">Enter - Pick</span>
-                <span className="px-2 py-0 border-b border-[#aaa]">Esc - Close</span>
-            </div>
-        </div>
-    </div>);
+    return (
+        <Page>
+            <PageHeader
+                icon={ShoppingCart}
+                title="Purchase"
+                subtitle="Goods received from suppliers"
+                meta={<>
+                    <HeaderStat label="Purchases" value={totals.count} />
+                    <HeaderStat label="Value" value={money(totals.value, 0)} />
+                    <HeaderStat label="Input Tax" value={money(totals.tax, 0)} />
+                </>}
+                actions={<>
+                    <Button variant="default" icon={RefreshCw} onClick={loadAll} disabled={loading}>Refresh</Button>
+                    <Button variant="primary" icon={Plus} onClick={openNew}>New Purchase</Button>
+                </>}
+            />
+
+            {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
+
+            <ListToolbar
+                search={search}
+                onSearch={setSearch}
+                placeholder="Search by purchase no, invoice, supplier…"
+                count={filtered.length}
+                countLabel={filtered.length === 1 ? 'purchase' : 'purchases'}
+                actions={
+                    selectedId
+                        ? <>
+                            <Button variant="default" size="sm" icon={FileText}
+                                onClick={() => openRecord(purchases.find(p => p.id === selectedId))}>Open</Button>
+                            <Button variant="danger" size="sm" icon={Trash2} onClick={() => handleDelete()}>Delete</Button>
+                          </>
+                        : <span className="text-[11.5px] text-[var(--pos-ink-3)]">Select a row to open or delete</span>
+                }
+            />
+
+            <PageBody padded={false}>
+                <DataTable
+                    className="!border-0 !rounded-none h-full"
+                    columns={listColumns}
+                    rows={filtered}
+                    loading={loading}
+                    selectedKey={selectedId}
+                    onSelect={(p) => setSelectedId(p.id)}
+                    onActivate={openRecord}
+                    empty={
+                        search
+                            ? <EmptyState icon={Search} title="No purchases match this search"
+                                action={<Button variant="default" onClick={() => setSearch('')}>Clear search</Button>} />
+                            : <EmptyState icon={ShoppingCart} title="No purchases yet"
+                                hint="Record your first supplier bill to bring stock in."
+                                action={<Button variant="primary" icon={Plus} onClick={openNew}>New Purchase</Button>} />
+                    }
+                />
+            </PageBody>
+
+            <ActionBar left={<ShortcutHints items={[['↑ ↓', 'move'], ['Enter', 'open purchase']]} />}>
+                <Button variant="primary" icon={Plus} onClick={openNew}>New Purchase</Button>
+            </ActionBar>
+        </Page>
+    );
 }

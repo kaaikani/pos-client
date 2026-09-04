@@ -6,7 +6,11 @@ const TTL = 60_000; // 1 min cache
 // ══════════════════════════════════════════════════════════════
 // ITEMS
 // ══════════════════════════════════════════════════════════════
-const ITEM_FIELDS = `id createdAt updatedAt code itemName tamilName category groupName brand hsnCode barcode upcCode unit packingUnit size taxName mfr purchaseRate salesRate mrpRate costRate cRate rateA rateB rateC rateD lastPurchaseRate lastSaleRate gstPercent priceIncludesTax taxMasterId discount profitMargin incentivePct batchNo mfgDate expiryDate serialNo minStock maxStock minStkQty maxStkQty isWeightBased isExpiryEnabled allowExpiry isStockBased sizesJson`;
+// `currentStock` is the server-maintained mirror of PosItemStockSnapshot.currentStock,
+// written inside writeLedger(). Read it for on-hand stock. `minStkQty` is a legacy
+// mirror of the same value and `minStock` is the REORDER LEVEL — never use either as
+// on-hand stock (that confusion was BUG-003).
+const ITEM_FIELDS = `id createdAt updatedAt code itemName tamilName category groupName brand hsnCode barcode upcCode unit packingUnit size taxName mfr purchaseRate salesRate mrpRate costRate cRate rateA rateB rateC rateD lastPurchaseRate lastSaleRate gstPercent priceIncludesTax taxMasterId discount profitMargin incentivePct batchNo mfgDate expiryDate serialNo minStock maxStock currentStock minStkQty maxStkQty isWeightBased isExpiryEnabled allowExpiry isStockBased sizesJson`;
 
 // POS GST tax masters (id → ratePercent/taxType) for live-cart tax resolution.
 export class PosTaxMastersQuery {
@@ -15,6 +19,56 @@ export class PosTaxMastersQuery {
             const data = await gql(`query PosTaxMasters { posTaxMasters { id ratePercent taxType } }`, { useAdmin: true });
             return data?.posTaxMasters || [];
         }, 60_000);
+    }
+}
+
+const TAX_FIELDS = 'id code name ratePercent taxType isDefault status';
+
+/** Full rows for the Tax Master screen — not the trimmed set the cart uses. */
+export class ListTaxMastersQuery {
+    async execute() {
+        return cachedFetch('pos:taxMasters:full', async () => {
+            const data = await gql(`query TaxMasters { posTaxMasters { ${TAX_FIELDS} } }`, { useAdmin: true });
+            return data?.posTaxMasters || [];
+        }, 30_000);
+    }
+}
+
+/* Both caches are dropped on write: the screen reads the full set, the POS cart
+   reads the trimmed one, and a stale rate in the cart would mis-tax a bill. */
+const invalidateTax = () => { invalidateCache('pos:taxMasters'); };
+
+export class CreateTaxMasterCommand {
+    async execute(input) {
+        const data = await gql(
+            `mutation CreateTax($input: PosTaxMasterInput!) { createPosTaxMaster(input: $input) { ${TAX_FIELDS} } }`,
+            { useAdmin: true, variables: { input } },
+        );
+        invalidateTax();
+        return data.createPosTaxMaster;
+    }
+}
+
+export class UpdateTaxMasterCommand {
+    async execute(id, input) {
+        const data = await gql(
+            `mutation UpdateTax($id: ID!, $input: PosTaxMasterUpdateInput!) { updatePosTaxMaster(id: $id, input: $input) { ${TAX_FIELDS} } }`,
+            { useAdmin: true, variables: { id, input } },
+        );
+        invalidateTax();
+        return data.updatePosTaxMaster;
+    }
+}
+
+/** Cancels the rate (status CANCELLED); bills that already used it keep their tax. */
+export class DeleteTaxMasterCommand {
+    async execute(id) {
+        const data = await gql(
+            `mutation DeleteTax($id: ID!) { deletePosTaxMaster(id: $id) { id status } }`,
+            { useAdmin: true, variables: { id } },
+        );
+        invalidateTax();
+        return data.deletePosTaxMaster;
     }
 }
 
@@ -43,52 +97,6 @@ export class UpdateItemCommand {
     }
 }
 
-// Sync a PharmaItem to Vendure catalog (creates Product + ProductVariant)
-export class SyncItemToVendureCommand {
-    async execute(item) {
-        const slug = String(item.itemName || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '') || `item-${item.code}`;
-
-        // Step 1: create Product
-        const productMutation = `
-            mutation CreateProduct($input: CreateProductInput!) {
-                createProduct(input: $input) { id name slug }
-            }`;
-        const productInput = {
-            enabled: true,
-            translations: [{
-                languageCode: 'en',
-                name: item.itemName,
-                slug: `${slug}-${item.code}`,
-                description: `${item.brand || ''} ${item.category || ''}`.trim(),
-            }],
-        };
-        const productData = await gql(productMutation, { useAdmin: true, variables: { input: productInput } });
-        const productId = productData?.createProduct?.id;
-        if (!productId) throw new Error('Vendure product creation failed');
-
-        // Step 2: create ProductVariant
-        const variantMutation = `
-            mutation CreateVariants($input: [CreateProductVariantInput!]!) {
-                createProductVariants(input: $input) { id sku price }
-            }`;
-        const priceInMinor = Math.round((parseFloat(item.salesRate) || 0) * 100); // paise
-        const variantInput = [{
-            productId,
-            sku: String(item.barcode || item.upcCode || item.code || `SKU-${Date.now()}`),
-            price: priceInMinor,
-            stockOnHand: parseInt(item.minStock || 0, 10) || 0,
-            trackInventory: 'TRUE',
-            translations: [{ languageCode: 'en', name: item.itemName }],
-        }];
-        await gql(variantMutation, { useAdmin: true, variables: { input: variantInput } });
-        invalidateCache('pharma:items');
-        return productId;
-    }
-}
-
 // Fetch tax rates from Vendure Admin API
 export class ListTaxRatesQuery {
     async execute() {
@@ -99,11 +107,22 @@ export class ListTaxRatesQuery {
     }
 }
 
+/**
+ * Nothing is hard-deleted — the record is cancelled and kept.
+ *
+ * This used to call `deletePharmaItem`, which was a one-line shim that called
+ * `cancelPharmaItem` with the reason "Legacy delete call". Two API names for one
+ * operation, and the audit trail recorded a useless reason. It now calls cancel
+ * directly and passes a real reason.
+ */
 export class DeleteItemCommand {
-    async execute(id) {
-        const data = await gql(`mutation DelItem($id: ID!) { deletePharmaItem(id: $id) }`, { useAdmin: true, variables: { id } });
+    async execute(id, reason) {
+        const data = await gql(
+            `mutation CancelItem($id: ID!, $reason: String) { cancelPharmaItem(id: $id, reason: $reason) { id } }`,
+            { useAdmin: true, variables: { id, reason: reason || 'Removed by user' } },
+        );
         invalidateCache('pharma:items');
-        return data.deletePharmaItem;
+        return !!data.cancelPharmaItem;
     }
 }
 
@@ -191,11 +210,16 @@ export class CreatePurchaseCommand {
     }
 }
 
+/** Cancels the purchase and reverses its stock — see DeleteItemCommand. */
 export class DeletePurchaseCommand {
-    async execute(id) {
-        const data = await gql(`mutation DelPurchase($id: ID!) { deletePharmaPurchase(id: $id) }`, { useAdmin: true, variables: { id } });
+    async execute(id, reason) {
+        const data = await gql(
+            `mutation CancelPurchase($id: ID!, $reason: String) { cancelPharmaPurchase(id: $id, reason: $reason) { id } }`,
+            { useAdmin: true, variables: { id, reason: reason || 'Removed by user' } },
+        );
         invalidateCache('pharma:purchases');
-        return data.deletePharmaPurchase;
+        invalidateCache('ledger:');
+        return !!data.cancelPharmaPurchase;
     }
 }
 
@@ -213,18 +237,22 @@ export class ListPaymentsQuery {
     }
 }
 
+/** Settles supplier bills, so the ledger cache is stale the moment this returns. */
 export class CreatePaymentCommand {
     async execute(input) {
         const data = await gql(`mutation CreatePay($input: PharmaPaymentInput!) { createPharmaPayment(input: $input) { ${PAYMENT_FIELDS} } }`, { useAdmin: true, variables: { input } });
         invalidateCache('pharma:payments');
+        invalidateCache('ledger:');
         return data.createPharmaPayment;
     }
 }
 
+/** Deleting a payment puts the supplier's outstanding back — see reverseVoucherSettlement. */
 export class DeletePaymentCommand {
     async execute(id) {
         const data = await gql(`mutation DelPay($id: ID!) { deletePharmaPayment(id: $id) }`, { useAdmin: true, variables: { id } });
         invalidateCache('pharma:payments');
+        invalidateCache('ledger:');
         return data.deletePharmaPayment;
     }
 }
@@ -243,10 +271,17 @@ export class ListReceiptsQuery {
     }
 }
 
+/**
+ * Creating a receipt SETTLES customer ledger bills, so the `ledger:` cache is
+ * stale the moment this returns. Without dropping it the collection screen
+ * re-read a 30s-old party roll-up and still showed the bill as fully open —
+ * the operator saw their own receipt have no effect.
+ */
 export class CreateReceiptCommand {
     async execute(input) {
         const data = await gql(`mutation CreateRcpt($input: PharmaReceiptInput!) { createPharmaReceipt(input: $input) { ${RECEIPT_FIELDS} } }`, { useAdmin: true, variables: { input } });
         invalidateCache('pharma:receipts');
+        invalidateCache('ledger:');
         return data.createPharmaReceipt;
     }
 }
@@ -255,6 +290,7 @@ export class DeleteReceiptCommand {
     async execute(id) {
         const data = await gql(`mutation DelRcpt($id: ID!) { deletePharmaReceipt(id: $id) }`, { useAdmin: true, variables: { id } });
         invalidateCache('pharma:receipts');
+        invalidateCache('ledger:');
         return data.deletePharmaReceipt;
     }
 }
@@ -321,10 +357,102 @@ export class CreateSaleCommand {
     }
 }
 
+/** Cancels the bill and reverses stock and the receivable — see DeleteItemCommand. */
 export class DeleteSaleCommand {
-    async execute(id) {
-        const data = await gql(`mutation DelSale($id: ID!) { deletePharmaSale(id: $id) }`, { useAdmin: true, variables: { id } });
+    async execute(id, reason) {
+        const data = await gql(
+            `mutation CancelSale($id: ID!, $reason: String) { cancelPharmaSale(id: $id, reason: $reason) { id } }`,
+            { useAdmin: true, variables: { id, reason: reason || 'Removed by user' } },
+        );
         invalidateCache('pharma:sales');
-        return data.deletePharmaSale;
+        invalidateCache('ledger:');
+        invalidateCache('pos:dashboard');
+        return !!data.cancelPharmaSale;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+// STOCK ADJUSTMENT  (server-backed — replaces the localStorage stub)
+// ══════════════════════════════════════════════════════════════
+// Server contract: pharma.api.ts `PosStockAdjustmentInput`
+//   adjNo!, adjDate!, itemCode!, adjustQty!, adjType! (ADD|REDUCE),
+//   atPrice?, reason?, details?
+// createPosStockAdjustment runs writeLedger() inside a transaction, so it
+// moves real stock and fills previousQty/resultingQty server-side.
+const STOCK_ADJ_FIELDS = `id createdAt adjNo adjDate itemCode previousQty adjustQty resultingQty adjType atPrice reason details status`;
+
+export class ListStockAdjustmentsQuery {
+    async execute() {
+        return cachedFetch('pos:stockAdjustments', async () => {
+            const data = await gql(`query PosStockAdjustments { posStockAdjustments { ${STOCK_ADJ_FIELDS} } }`, { useAdmin: true });
+            return data?.posStockAdjustments || [];
+        }, 30_000);
+    }
+}
+
+export class CreateStockAdjustmentCommand {
+    async execute(input) {
+        const data = await gql(
+            `mutation CreatePosStockAdjustment($input: PosStockAdjustmentInput!) { createPosStockAdjustment(input: $input) { ${STOCK_ADJ_FIELDS} } }`,
+            { useAdmin: true, variables: { input } },
+        );
+        // Stock moved → item snapshots and stock reports are stale.
+        invalidateCache('pos:stockAdjustments');
+        invalidateCache('pharma:items');
+        return data.createPosStockAdjustment;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+// PURCHASE RETURN  (server-backed — replaces the localStorage stub)
+// ══════════════════════════════════════════════════════════════
+// Server contract: pharma.api.ts `PosPurchaseReturnInput`.
+// IMPORTANT: pharma.service.ts `createPurchaseReturn` REJECTS free-form
+// returns — `originalPurchaseId` is mandatory. It also overwrites puRate
+// from the source purchase and caps qty at (original - already returned),
+// so the UI must always start from a source bill.
+const PURCHASE_RETURN_FIELDS = `id createdAt retNo retDate originalPurchaseId supplier supplierGstin placeOfSupply address rowsJson totalAmount totalDisc totalTax netAmount reason status`;
+
+export class ListPurchaseReturnsQuery {
+    async execute() {
+        return cachedFetch('pos:purchaseReturns', async () => {
+            const data = await gql(`query PosPurchaseReturns { posPurchaseReturns { ${PURCHASE_RETURN_FIELDS} } }`, { useAdmin: true });
+            return (data?.posPurchaseReturns || []).map(r => ({
+                ...r,
+                rows: (() => { try { return JSON.parse(r.rowsJson || '[]') || []; } catch { return []; } })(),
+            }));
+        }, 30_000);
+    }
+}
+
+export class CreatePurchaseReturnCommand {
+    async execute(input) {
+        const data = await gql(
+            `mutation CreatePosPurchaseReturn($input: PosPurchaseReturnInput!) { createPosPurchaseReturn(input: $input) { ${PURCHASE_RETURN_FIELDS} } }`,
+            { useAdmin: true, variables: { input } },
+        );
+        // Stock decremented → items and the source purchase list are stale.
+        invalidateCache('pos:purchaseReturns');
+        invalidateCache('pharma:items');
+        invalidateCache('pharma:purchases');
+        return data.createPosPurchaseReturn;
+    }
+}
+
+/** Find source purchases to return against. Not cached — it is a live search. */
+export class SearchPurchasesForReturnQuery {
+    async execute({ supplier, itemCode, fromDate, toDate, limit = 25 } = {}) {
+        const data = await gql(
+            `query SearchPurchasesForReturn($supplier: String, $itemCode: String, $fromDate: String, $toDate: String, $limit: Int) {
+                searchPurchasesForReturn(supplier: $supplier, itemCode: $itemCode, fromDate: $fromDate, toDate: $toDate, limit: $limit) {
+                    id purNo purDate invNo supplier supplierGstin address rowsJson netAmount
+                }
+            }`,
+            { useAdmin: true, variables: { supplier: supplier || null, itemCode: itemCode || null, fromDate: fromDate || null, toDate: toDate || null, limit } },
+        );
+        return (data?.searchPurchasesForReturn || []).map(p => ({
+            ...p,
+            rows: (() => { try { return JSON.parse(p.rowsJson || '[]') || []; } catch { return []; } })(),
+        }));
     }
 }
