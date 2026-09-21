@@ -23,12 +23,12 @@ import {
     Wallet, Check, Zap, Eraser, Printer,
 } from 'lucide-react';
 import { LedgerPartiesQuery, LedgerOpenBillsQuery } from '../../core/queries/ledger.query';
-import { CreateReceiptCommand } from '../../core/queries/pharma.query';
+import { CreateReceiptCommand } from '../../core/queries/pos.query';
 import { invalidateDashboard } from '../../core/queries/dashboard.query';
 import {
     Page, PageHeader, PageBody, HeaderStat, ListToolbar, Button, DataTable,
     Banner, EmptyState, Spinner, Card, Field, Input, Select, Textarea,
-    FormGrid, money, useConfirm, ShortcutHints,
+    FormGrid, money, useConfirm, ShortcutHints, useFormFlow,
 } from '../../components/pos';
 import { canDo, readSession } from '../../components/pos/permissions';
 import { printVoucher, VOUCHER_SIZES } from '../../components/pos/voucher-print';
@@ -86,6 +86,10 @@ export default function ReceiptModule() {
     const [alloc, setAlloc] = useState({});
     const [saving, setSaving] = useState(false);
     const receivedRef = useRef(null);
+
+    // Enter walks date -> mode -> amount -> narration. It does not save at the
+    // end: the allocation table below is the last thing the operator touches.
+    const flow = useFormFlow(undefined, { autoFocus: false });
 
     // Printing
     const [printSize, setPrintSize] = useState('A5');
@@ -211,8 +215,11 @@ export default function ReceiptModule() {
 
         setSaving(true);
         try {
-            await new CreateReceiptCommand().execute({
-                docNo,
+            // docNo is left out when blank so the server issues it from the RCP
+            // series. Sending an empty string would look like a deliberate
+            // override and store a receipt with no number.
+            const saved = await new CreateReceiptCommand().execute({
+                ...(docNo ? { docNo } : {}),
                 docDate,
                 billRefNo: lines.map(l => l.invoiceNumber).join(', ').slice(0, 190),
                 docType: 'Against Ref.',
@@ -231,10 +238,15 @@ export default function ReceiptModule() {
             // Keep everything the voucher needs BEFORE the state is cleared —
             // openBefore has to be the balance as it stood when the money was
             // taken, not what the bill reads after the server settled it.
+            // The number the server actually issued. The printed voucher and the
+            // database row must agree.
+            const issuedNo = String(saved?.docNo || docNo || '');
+            setDocNo(issuedNo);
+
             const voucher = {
                 kind: 'RECEIPT',
                 company: { name: 'AVS ECOM PRIVATE LIMITED' },
-                docNo,
+                docNo: issuedNo,
                 docDate,
                 partyName: party.partyName,
                 mode,
@@ -256,7 +268,7 @@ export default function ReceiptModule() {
 
             setBanner({
                 tone: 'ok',
-                text: `Receipt ${docNo} saved — ${money(receivedAmt)} collected from ${party.partyName}`
+                text: `Receipt ${issuedNo} saved — ${money(receivedAmt)} collected from ${party.partyName}`
                     + `${unapplied > 0 ? `, ${money(unapplied)} on account` : ''}.`
                     + ` ${money(voucher.partyBalanceAfter)} still due.`,
             });
@@ -333,6 +345,7 @@ export default function ReceiptModule() {
                 <PageBody className="flex flex-col gap-4">
                     {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
                     <ListToolbar
+                        autoFocus
                         search={search}
                         onSearch={setSearch}
                         placeholder="Search customer, mobile or GSTIN…"
@@ -434,10 +447,11 @@ export default function ReceiptModule() {
             <PageBody className="flex flex-col gap-4">
                 {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
-                <Card className="shrink-0" title="Receipt">
+                <Card ref={flow.ref} className="shrink-0" title="Receipt">
                     <FormGrid cols={4}>
-                        <Field label="Receipt No">
-                            <Input value={docNo} onChange={e => setDocNo(e.target.value)} />
+                        <Field label="Receipt No" hint="Issued on save">
+                            <Input readOnly placeholder="Auto" value={docNo}
+                                title="Issued by the server when the receipt is saved" />
                         </Field>
                         <Field label="Date" required>
                             <Input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} />

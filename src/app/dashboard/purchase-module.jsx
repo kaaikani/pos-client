@@ -18,11 +18,12 @@ import {
 } from 'lucide-react';
 import {
     ListPurchasesQuery, CreatePurchaseCommand, DeletePurchaseCommand, ListItemsQuery,
-} from '../../core/queries/pharma.query';
+    ItemForTransactionQuery,
+} from '../../core/queries/pos.query';
 import {
     Page, PageHeader, PageBody, ActionBar, HeaderStat, ListToolbar, FormHeader, FormSection,
     FormGrid, Field, Input, Select, Button, DataTable, Banner, EmptyState, Badge, TotalsPanel,
-    ShortcutHints, useConfirm, money,
+    ShortcutHints, useConfirm, money, useFormFlow,
 } from '../../components/pos';
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -194,8 +195,34 @@ export default function PurchaseModule() {
         }, 30);
     }, [picker, rows.length]);
 
+    // itemCode -> units the server allows for it. A purchase is very often made
+    // in a bigger unit than the one stock is kept in — a bag of 25 KG, a box of
+    // 20 pieces — and until now this grid could only record the base unit.
+    const [unitsByItem, setUnitsByItem] = useState({});
+
+    const ensureUnitsFor = useCallback(async (code) => {
+        const key = String(code || '');
+        if (!key || unitsByItem[key]) return;
+        try {
+            const found = await new ItemForTransactionQuery().execute({ code: key });
+            setUnitsByItem(prev => ({ ...prev, [key]: found?.allowedUnits || [] }));
+        } catch {
+            setUnitsByItem(prev => ({ ...prev, [key]: [] }));
+        }
+    }, [unitsByItem]);
+
+    const rowUnits = (r) => unitsByItem[String(r?.itemCode || '')] || [];
+
     // Enter/Tab across grid cells; Enter on the last cell of the last row adds a row.
     const CELL_ORDER = ['qty', 'free', 'puRate', 'discPct', 'taxPct', 'mrp', 'saleRate'];
+    // The header block only. Enter past the last header field opens the item
+    // picker; the grid below keeps its own cell-to-cell flow.
+    //
+    // autoFocus is off because a new purchase already opens the item picker
+    // by itself (openNew, below) — this screen starts at the goods, not at the
+    // supplier, and two things competing for the cursor is worse than either.
+    const hdrFlow = useFormFlow(() => openPicker(null), { autoFocus: false });
+
     const cellKeyDown = useCallback((e, rowIdx, cell) => {
         if (e.key === 'Escape') { e.currentTarget.blur(); return; }
         if (e.key !== 'Enter') return;
@@ -222,7 +249,10 @@ export default function PurchaseModule() {
 
     const openNew = useCallback(() => {
         setHdr({
-            purNo: String(purchases.length + 1), purDate: today(), invNo: '', invDate: today(),
+            // purNo is issued by the server on save. It used to be the number of
+            // purchases already loaded, plus one — so cancelling a purchase handed
+            // its number straight to the next one.
+            purNo: '', purDate: today(), invNo: '', invDate: today(),
             taxMode: 'Exclusive', payType: 'Cash', otherState: false,
             supplier: '', address: '', orderRef: '', transMode: '', transportName: '',
         });
@@ -258,8 +288,10 @@ export default function PurchaseModule() {
 
         setSaving(true);
         try {
-            await new CreatePurchaseCommand().execute({
-                purNo: hdr.purNo, purDate: hdr.purDate, invNo: hdr.invNo, invDate: hdr.invDate,
+            const saved = await new CreatePurchaseCommand().execute({
+                // purNo left out when blank so the server issues it.
+                ...(hdr.purNo ? { purNo: hdr.purNo } : {}),
+                purDate: hdr.purDate, invNo: hdr.invNo, invDate: hdr.invDate,
                 taxMode: hdr.taxMode, payType: hdr.payType, otherState: hdr.otherState,
                 supplier: hdr.supplier.trim(), orderRef: hdr.orderRef,
                 transMode: hdr.transMode, address: hdr.address, transportName: hdr.transportName,
@@ -268,6 +300,9 @@ export default function PurchaseModule() {
                     return {
                         itemCode: r.itemCode, itemName: r.itemName,
                         batchNo: r.batchNo || '', expiry: r.expiry || '',
+                        // Blank means the item's base unit; the server treats a
+                        // missing unit exactly that way.
+                        ...(r.unit ? { unit: r.unit } : {}),
                         qty: num(r.qty), freeQty: num(r.free),
                         puRate: num(r.puRate), mrpRate: num(r.mrp), sellingRate: num(r.saleRate),
                         discountPct: num(r.discPct), taxPct: num(r.taxPct),
@@ -279,7 +314,10 @@ export default function PurchaseModule() {
             });
             await loadAll();
             setView('list');
-            setBanner({ tone: 'ok', text: `Purchase ${hdr.purNo} saved — ${money(grand.amount)} from ${hdr.supplier.trim()}.` });
+            setBanner({
+                tone: 'ok',
+                text: `Purchase ${saved?.purNo || ''} saved — ${money(grand.amount)} from ${hdr.supplier.trim()}.`,
+            });
         } catch (err) {
             setBanner({ tone: 'danger', text: err.message });
         } finally {
@@ -383,7 +421,7 @@ export default function PurchaseModule() {
                 <PageBody>
                     <div className="max-w-[1240px] mx-auto flex flex-col gap-4">
 
-                        <div className="bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] px-5 py-4">
+                        <div ref={hdrFlow.ref} className="bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] px-5 py-4">
                             <FormSection title="Supplier & Invoice">
                                 <FormGrid cols={4}>
                                     <Field label="Supplier" required span={2}>
@@ -391,7 +429,8 @@ export default function PurchaseModule() {
                                             onChange={e => setH('supplier', e.target.value)} placeholder="Supplier name" autoComplete="off" />
                                     </Field>
                                     <Field label="Purchase No">
-                                        <Input value={hdr.purNo} disabled={readOnly} onChange={e => setH('purNo', e.target.value)} />
+                                        <Input value={hdr.purNo} readOnly placeholder={readOnly ? '' : 'Auto'}
+                                            title="Issued by the server when the purchase is saved" />
                                     </Field>
                                     <Field label="Purchase Date">
                                         <Input type="date" value={hdr.purDate} disabled={readOnly} onChange={e => setH('purDate', e.target.value)} />
@@ -466,6 +505,7 @@ export default function PurchaseModule() {
                                             <th style={{ width: 96 }}>Batch</th>
                                             <th style={{ width: 118 }}>Expiry</th>
                                             <th style={{ width: 72 }} className="text-right">Qty</th>
+                                            <th style={{ width: 74 }}>Unit</th>
                                             <th style={{ width: 62 }} className="text-right">Free</th>
                                             <th style={{ width: 92 }} className="text-right">Rate</th>
                                             <th style={{ width: 66 }} className="text-right">Disc%</th>
@@ -499,7 +539,31 @@ export default function PurchaseModule() {
                                                         <input type="date" value={r.expiry} disabled={readOnly} onChange={e => setRow(i, 'expiry', e.target.value)}
                                                             className={cellCls + ' !text-left'} />
                                                     </td>
-                                                    {['qty', 'free', 'puRate', 'discPct', 'taxPct', 'mrp', 'saleRate'].map(cell => (
+                                                    <td className="!px-1">
+                                                        <input data-cell={`qty-${i}`} type="number" step="any" min="0"
+                                                            value={r.qty ?? ''} disabled={readOnly}
+                                                            onChange={e => setRow(i, 'qty', e.target.value)}
+                                                            onFocus={e => e.target.select()}
+                                                            onKeyDown={e => cellKeyDown(e, i, 'qty')}
+                                                            className={cellCls} />
+                                                    </td>
+                                                    {/* The unit this quantity is stated in. Only units the
+                                                        server accepts for the item are offered; blank means
+                                                        the item's own base unit. */}
+                                                    <td className="!px-1">
+                                                        <select value={r.unit || ''} disabled={readOnly}
+                                                            onChange={e => setRow(i, 'unit', e.target.value)}
+                                                            onFocus={() => ensureUnitsFor(r.itemCode)}
+                                                            className={cellCls + ' !text-left'}>
+                                                            <option value="">{r.itemCode ? 'base' : '—'}</option>
+                                                            {rowUnits(r).map(a => (
+                                                                <option key={a.unitCode} value={a.unitCode}>
+                                                                    {a.isBase ? a.unitCode : `${a.unitCode} (${a.conversionRate})`}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    {['free', 'puRate', 'discPct', 'taxPct', 'mrp', 'saleRate'].map(cell => (
                                                         <td key={cell} className="!px-1">
                                                             <input data-cell={`${cell}-${i}`} type="number" step="any" min="0"
                                                                 value={r[cell === 'mrp' ? 'mrp' : cell] ?? ''} disabled={readOnly}
@@ -578,6 +642,7 @@ export default function PurchaseModule() {
             {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
             <ListToolbar
+                autoFocus
                 search={search}
                 onSearch={setSearch}
                 placeholder="Search by purchase no, invoice, supplier…"

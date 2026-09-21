@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { Boxes, Save, RefreshCw, Search, TrendingUp, TrendingDown } from 'lucide-react';
-import { ListItemsQuery, UpdateItemCommand } from '../../core/queries/pharma.query';
+import { ListItemsQuery, UpdateItemCommand } from '../../core/queries/pos.query';
 
 export default function StockUpdationModule() {
     const [items, setItems] = useState([]);

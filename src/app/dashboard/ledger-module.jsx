@@ -282,6 +282,7 @@ export default function LedgerModule({ setActiveTab }) {
             {error && <Banner tone="danger" onClose={() => setError('')}>{error}</Banner>}
 
             <ListToolbar
+                autoFocus
                 search={search}
                 onSearch={setSearch}
                 placeholder="Search party, mobile or GSTIN…"

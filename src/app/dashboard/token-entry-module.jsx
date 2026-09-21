@@ -10,7 +10,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Hash, Plus, Save, Printer, Trash2, RefreshCw, X, Users, CalendarDays } from 'lucide-react';
-import { ListTokensQuery, CreateTokenCommand, DeleteTokenCommand } from '../../core/queries/pharma.query';
+import { ListTokensQuery, CreateTokenCommand, DeleteTokenCommand } from '../../core/queries/pos.query';
 import {
     Page, PageHeader, PageBody, ActionBar, HeaderStat, ListToolbar, FormHeader, FormSection,
     FormGrid, Field, Input, Button, DataTable, Banner, EmptyState, Badge, TotalsPanel,
@@ -65,19 +65,22 @@ export default function TokenEntryModule() {
     }, [tokens, viewDate, search]);
 
     const dayTotal = useMemo(() => dayTokens.reduce((s, t) => s + num(t.total), 0), [dayTokens]);
-    const nextTokenNo = useCallback(
-        (forDate) => String(tokens.filter(t => t.tokenDate === forDate).length + 1),
-        [tokens],
-    );
+    // The token number is issued by the SERVER when the token is saved.
+    //
+    // It used to be the count of tokens already on screen, plus one. Two
+    // counters open on the same day therefore called two different patients by
+    // token 1 — which is exactly what happened on 2026-09-03 — and deleting a
+    // token handed its number to the next patient. The series restarts daily by
+    // default and can be set to run continuously in POS settings.
 
     /* ── form ───────────────────────────────────────────── */
 
     const openNew = useCallback(() => {
-        setForm({ tokenDate: viewDate, tokenNo: nextTokenNo(viewDate), patientName: '', cellNo: '', address: '', amount: '', injAmt: '' });
+        setForm({ tokenDate: viewDate, tokenNo: '', patientName: '', cellNo: '', address: '', amount: '', injAmt: '' });
         setEditingId(null);
         setBanner(null);
         setView('form');
-    }, [viewDate, nextTokenNo]);
+    }, [viewDate]);
 
     const openRecord = useCallback((t) => {
         setForm({
@@ -105,8 +108,13 @@ export default function TokenEntryModule() {
         setSaving(true);
         setBanner(null);
         try {
-            await new CreateTokenCommand().execute({
-                tokenNo: parseInt(form.tokenNo, 10) || 1,
+            // Only send a number when the operator is editing an existing token
+            // and it is already filled in. Sending a fallback of 1 for a blank
+            // field would look to the server like a deliberate override and
+            // collide with the token already holding 1 that day.
+            const typedNo = parseInt(form.tokenNo, 10);
+            const issued = await new CreateTokenCommand().execute({
+                ...(Number.isFinite(typedNo) && typedNo > 0 ? { tokenNo: typedNo } : {}),
                 tokenDate: form.tokenDate,
                 tokenTime: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
                 patientName: String(form.patientName).trim(),
@@ -119,7 +127,10 @@ export default function TokenEntryModule() {
             await loadAll();
             setViewDate(form.tokenDate);
             setView('list');
-            setBanner({ tone: 'ok', text: `Token ${form.tokenNo} issued to ${String(form.patientName).trim()}.` });
+            setBanner({
+                tone: 'ok',
+                text: `Token ${issued?.tokenNo ?? ''} issued to ${String(form.patientName).trim()}.`,
+            });
         } catch (err) {
             setBanner({ tone: 'danger', text: err.message });
         } finally {
@@ -218,7 +229,7 @@ ${amt > 0 ? `<div class="a">₹${amt.toFixed(2)}</div>` : ''}
                 <FormHeader
                     onBack={backToList}
                     title={editingId ? `Token ${form.tokenNo}` : 'New Token'}
-                    subtitle={editingId ? form.patientName : `Issuing token ${form.tokenNo} for ${form.tokenDate}`}
+                    subtitle={editingId ? form.patientName : `New token for ${form.tokenDate}`}
                     badge={editingId ? <Badge tone="neutral">Issued</Badge> : <Badge tone="ok">New</Badge>}
                     actions={<>
                         <Button variant="default" icon={Printer} onClick={() => printSlip()}>Print</Button>
@@ -235,11 +246,10 @@ ${amt > 0 ? `<div class="a">₹${amt.toFixed(2)}</div>` : ''}
                             <FormGrid cols={2}>
                                 <Field label="Date">
                                     <Input type="date" value={form.tokenDate} disabled={!!editingId}
-                                        onChange={e => { set('tokenDate', e.target.value); set('tokenNo', nextTokenNo(e.target.value)); }} />
+                                        onChange={e => { set('tokenDate', e.target.value); }} />
                                 </Field>
-                                <Field label="Token No" hint="Auto-numbered per day">
-                                    <Input numeric value={form.tokenNo} disabled={!!editingId}
-                                        onChange={e => set('tokenNo', e.target.value)} />
+                                <Field label="Token No" hint="Issued by the server on save">
+                                    <Input numeric readOnly placeholder="Auto" value={form.tokenNo} />
                                 </Field>
                             </FormGrid>
                         </FormSection>
@@ -314,6 +324,7 @@ ${amt > 0 ? `<div class="a">₹${amt.toFixed(2)}</div>` : ''}
             {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
             <ListToolbar
+                autoFocus
                 search={search}
                 onSearch={setSearch}
                 placeholder="Search by name, mobile or token no…"

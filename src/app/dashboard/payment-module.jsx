@@ -23,12 +23,12 @@ import {
     Check, Zap, Eraser, Printer,
 } from 'lucide-react';
 import { LedgerPartiesQuery, LedgerOpenBillsQuery } from '../../core/queries/ledger.query';
-import { CreatePaymentCommand } from '../../core/queries/pharma.query';
+import { CreatePaymentCommand } from '../../core/queries/pos.query';
 import { invalidateDashboard } from '../../core/queries/dashboard.query';
 import {
     Page, PageHeader, PageBody, HeaderStat, ListToolbar, Button, DataTable,
     Banner, EmptyState, Card, Field, Input, Select, Textarea,
-    FormGrid, money, useConfirm, ShortcutHints,
+    FormGrid, money, useConfirm, ShortcutHints, useFormFlow,
 } from '../../components/pos';
 import { canDo, readSession } from '../../components/pos/permissions';
 import { printVoucher, VOUCHER_SIZES } from '../../components/pos/voucher-print';
@@ -83,6 +83,9 @@ export default function PaymentModule() {
     const [alloc, setAlloc] = useState({});
     const [saving, setSaving] = useState(false);
     const payingRef = useRef(null);
+
+    // Same as the receipt screen: walk the header, leave saving to the button.
+    const flow = useFormFlow(undefined, { autoFocus: false });
 
     // Printing
     const [printSize, setPrintSize] = useState('A5');
@@ -229,8 +232,11 @@ export default function PaymentModule() {
 
         setSaving(true);
         try {
-            await new CreatePaymentCommand().execute({
-                payNo: docNo,
+            // payNo is left out when blank so the server issues it from the PAY
+            // series. Sending an empty string would look like a deliberate
+            // override and store a voucher with no number.
+            const saved = await new CreatePaymentCommand().execute({
+                ...(docNo ? { payNo: docNo } : {}),
                 payDate: docDate,
                 refNo,
                 payType: 'Against Ref.',
@@ -248,10 +254,15 @@ export default function PaymentModule() {
 
             // Capture the voucher BEFORE state is cleared — openBefore must be the
             // balance as it stood when the money went out.
+            // The number the server actually issued. The printed voucher and the
+            // database row must agree.
+            const issuedNo = String(saved?.payNo || docNo || '');
+            setDocNo(issuedNo);
+
             const voucher = {
                 kind: 'PAYMENT',
                 company: { name: 'AVS ECOM PRIVATE LIMITED' },
-                docNo,
+                docNo: issuedNo,
                 docDate,
                 partyName: party.partyName,
                 mode,
@@ -275,7 +286,7 @@ export default function PaymentModule() {
 
             setBanner({
                 tone: 'ok',
-                text: `Payment ${docNo} saved — ${money(payingAmt)} paid to ${party.partyName}`
+                text: `Payment ${issuedNo} saved — ${money(payingAmt)} paid to ${party.partyName}`
                     + `${allocDisc > 0 ? `, ${money(allocDisc)} discount` : ''}.`
                     + ` ${money(voucher.partyBalanceAfter)} still payable.`,
             });
@@ -352,6 +363,7 @@ export default function PaymentModule() {
                 <PageBody className="flex flex-col gap-4">
                     {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
                     <ListToolbar
+                        autoFocus
                         search={search}
                         onSearch={setSearch}
                         placeholder="Search supplier, mobile or GSTIN…"
@@ -461,10 +473,11 @@ export default function PaymentModule() {
             <PageBody className="flex flex-col gap-4">
                 {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
-                <Card className="shrink-0" title="Payment">
+                <Card ref={flow.ref} className="shrink-0" title="Payment">
                     <FormGrid cols={4}>
-                        <Field label="Voucher No">
-                            <Input value={docNo} onChange={e => setDocNo(e.target.value)} />
+                        <Field label="Voucher No" hint="Issued on save">
+                            <Input readOnly placeholder="Auto" value={docNo}
+                                title="Issued by the server when the voucher is saved" />
                         </Field>
                         <Field label="Date" required>
                             <Input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} />

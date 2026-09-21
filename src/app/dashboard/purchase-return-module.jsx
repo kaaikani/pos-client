@@ -1,11 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { Undo2, Save, Search, Loader2, AlertCircle, ArrowLeft, FileText, RefreshCw } from 'lucide-react';
 import {
     ListPurchaseReturnsQuery,
     CreatePurchaseReturnCommand,
     SearchPurchasesForReturnQuery,
-} from '../../core/queries/pharma.query';
+} from '../../core/queries/pos.query';
 
 /**
  * Purchase Return — server-backed (BUG-002).
@@ -14,7 +15,7 @@ import {
  * the database and never moved stock. It now calls `createPosPurchaseReturn`.
  *
  * The flow is source-bill-driven because the server REQUIRES it —
- * PharmaService.createPurchaseReturn() rejects any input without
+ * PosService.createPurchaseReturn() rejects any input without
  * `originalPurchaseId` ("Free-form Purchase Returns are not allowed"). The
  * server additionally:
  *   · overwrites puRate from the original purchase row,
@@ -33,17 +34,18 @@ const rowCode = (r) => String(r?.itemCode || r?.code || '').trim();
 /** Original purchases and prior returns both count free qty toward the cap. */
 const rowQty = (r) => num(r?.qty) + num(r?.freeQty);
 
-const makeRetNo = () => {
-    const d = new Date();
-    const p = (n) => String(n).padStart(2, '0');
-    return `PR-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-};
+// The return number is issued by the server, from the PRT series. It used to be
+// a timestamp — unique, but not a series, so it could not be reported in
+// GSTR-1's document ranges and told nobody how many returns had been raised.
+const makeRetNo = () => '';
 
 export default function PurchaseReturnModule() {
     const [returns, setReturns] = useState([]);
     const [loadingReturns, setLoadingReturns] = useState(true);
 
-    // Step 1 — find the source purchase
+    // Step 1 — find the source purchase. The supplier box is where the whole
+    // screen begins, so that is where the cursor starts.
+    const searchRef = usePageFocus();
     const [searchSupplier, setSearchSupplier] = useState('');
     const [searchItem, setSearchItem] = useState('');
     const [results, setResults] = useState([]);
@@ -153,14 +155,15 @@ export default function PurchaseReturnModule() {
         if (saving || !source) return;
         if (!selected.length) { setBanner({ kind: 'err', text: 'Enter a return quantity on at least one line.' }); return; }
         if (hasOver) { setBanner({ kind: 'err', text: 'One or more lines exceed the remaining returnable quantity.' }); return; }
-        if (!retNo.trim()) { setBanner({ kind: 'err', text: 'Return Number is required.' }); return; }
         if (!String(source.supplier || '').trim()) { setBanner({ kind: 'err', text: 'The source purchase has no supplier — it cannot be returned against.' }); return; }
 
         setSaving(true);
         setBanner(null);
         try {
             const saved = await new CreatePurchaseReturnCommand().execute({
-                retNo: retNo.trim(),
+                // retNo left out when blank so the server issues it from the PRT
+                // series. It used to be a timestamp made in this file.
+                ...(retNo.trim() ? { retNo: retNo.trim() } : {}),
                 retDate,
                 originalPurchaseId: Number(source.id),
                 supplier: source.supplier,
@@ -184,6 +187,7 @@ export default function PurchaseReturnModule() {
                 reason,
             });
             setBanner({ kind: 'ok', text: `Purchase return ${saved.retNo} saved — ₹${num(saved.netAmount).toFixed(2)} returned and stock reduced.` });
+            setRetNo('');
             clearSource();
             setResults([]);
             setSearched(false);
@@ -228,7 +232,7 @@ export default function PurchaseReturnModule() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                             <label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Supplier</label>
-                            <input value={searchSupplier} onChange={e=>setSearchSupplier(e.target.value)} onKeyDown={e=>{ if (e.key === 'Enter') doSearch(); }} placeholder="e.g. Durga Traders" className="w-full px-3 py-2 border-2 border-rose-200 rounded-lg text-sm font-bold outline-none focus:border-rose-500"/>
+                            <input ref={searchRef} value={searchSupplier} onChange={e=>setSearchSupplier(e.target.value)} onKeyDown={e=>{ if (e.key === 'Enter') doSearch(); }} placeholder="e.g. Durga Traders" className="w-full px-3 py-2 border-2 border-rose-200 rounded-lg text-sm font-bold outline-none focus:border-rose-500"/>
                         </div>
                         <div>
                             <label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Item Code</label>
@@ -293,7 +297,7 @@ export default function PurchaseReturnModule() {
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div><label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Return No *</label><input value={retNo} onChange={e=>setRetNo(e.target.value)} className="w-full px-3 py-2 border-2 border-rose-200 rounded-lg text-sm font-bold outline-none focus:border-rose-500"/></div>
+                        <div><label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Return No</label><input value={retNo} readOnly placeholder="Auto" title="Issued by the server when the return is saved" className="w-full px-3 py-2 border-2 border-rose-200 rounded-lg text-sm font-bold outline-none bg-rose-50/40 cursor-default"/></div>
                         <div><label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Date</label><input type="date" value={retDate} onChange={e=>setRetDate(e.target.value)} className="w-full px-3 py-2 border-2 border-rose-200 rounded-lg text-sm font-bold outline-none focus:border-rose-500"/></div>
                         <div className="col-span-2"><label className="text-[10px] font-black uppercase text-rose-700 block mb-1">Reason</label>
                             <div className="flex flex-wrap gap-2">

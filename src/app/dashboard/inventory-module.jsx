@@ -1,13 +1,16 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { Package, Search, Download, AlertTriangle, CheckCircle, TrendingDown, TrendingUp, Box, ShieldAlert, Activity, RefreshCw, Layers } from 'lucide-react';
-import { ListItemsQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery } from '../../core/queries/pos.query';
 import { invalidateCache } from '../../core/queries/cache';
 
 // Read sales reports from localStorage to compute stock usage
 function loadReports() { try { return JSON.parse(localStorage.getItem('pos_reports') || '[]'); } catch { return []; } }
 
 export default function InventoryModule() {
+    const searchRef = usePageFocus();
+
     const [items, setItems] = useState([]);
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -31,11 +34,11 @@ export default function InventoryModule() {
         loadAll();
         // Auto-refresh every 30 seconds for real-time feel
         const interval = setInterval(() => {
-            invalidateCache('pharma:items');
+            invalidateCache('pos:items');
             loadAll();
         }, 30000);
         // Refresh when window gets focus
-        const onFocus = () => { invalidateCache('pharma:items'); loadAll(); };
+        const onFocus = () => { invalidateCache('pos:items'); loadAll(); };
         window.addEventListener('focus', onFocus);
         // Refresh when localStorage changes (bill saved)
         const onStorage = (e) => { if (e.key === 'pos_reports') setReports(loadReports()); };
@@ -136,7 +139,7 @@ export default function InventoryModule() {
                 </p>
             </div>
             <div className="flex items-center gap-2">
-                <button onClick={()=>{ invalidateCache('pharma:items'); loadAll(); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded border border-white/20 text-[12px] font-bold">
+                <button onClick={()=>{ invalidateCache('pos:items'); loadAll(); }} className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded border border-white/20 text-[12px] font-bold">
                     <RefreshCw size={14} className={loading ? 'animate-spin' : ''}/> Refresh
                 </button>
                 <button onClick={exportCSV} className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[12px] font-bold">
@@ -161,7 +164,7 @@ export default function InventoryModule() {
         <div className="bg-white px-4 py-2 flex items-center gap-2 shrink-0 border-b border-slate-300">
             <div className="relative flex-1 max-w-sm">
                 <Search size={14} className="absolute left-2.5 top-2.5 text-slate-500"/>
-                <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name, code, brand, HSN, batch..." className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded text-[12px] font-bold outline-none focus:border-[#2980b9] bg-white"/>
+                <input ref={searchRef} type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name, code, brand, HSN, batch..." className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded text-[12px] font-bold outline-none focus:border-[#2980b9] bg-white"/>
             </div>
             <div className="flex items-center gap-0.5">
                 {[

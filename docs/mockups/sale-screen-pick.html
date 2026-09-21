@@ -1,0 +1,348 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Sale screen — pick one</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;background:#8A94A6;font-size:12px;
+     -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:297mm;height:210mm;margin:0 auto;padding:9mm 10mm;position:relative;overflow:hidden;
+      background:#F4F6FA;color:#1F2937}
+@page{size:A4 landscape;margin:0}
+@media print{body{background:#fff}}
+h2{font-size:18px;font-weight:670;letter-spacing:-.3px}
+.sub{font-size:12.5px;color:#718096;margin-top:2px}
+.foot{position:absolute;left:10mm;bottom:6mm;font-size:9.5px;color:#718096}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.rail{width:132px;background:#fff;border-right:1px solid #E6EAF1;padding:8px 0;flex:none}
+.rail a{display:flex;align-items:center;gap:7px;padding:6px 12px;color:#4A5568;font-size:11px;
+        text-decoration:none;position:relative}
+.rail a.on{background:#EEF2F7;color:#1A202C;font-weight:640}
+.rail a.on:before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:3px;background:#4A5568;border-radius:0 2px 2px 0}
+.dot{width:12px;height:12px;border-radius:3px;background:#E2E8F0;flex:none}
+.rail a.on .dot{background:#4A5568}
+</style></head><body>
+
+<div class="page">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <h2>Settings &rsaquo; Sale screen</h2>
+    <div class="sub" style="margin:0">Per + padam. Onnu adichunga, mudinjadhu.</div>
+  </div>
+
+  <div style="margin-top:9px;height:172mm;display:flex;border:1px solid #E9EDF3;border-radius:13px;
+              overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(31,41,55,.04),0 12px 26px -16px rgba(31,41,55,.2)">
+    <div class="rail">
+      <a><span class="dot"></span>General</a>
+      <a><span class="dot"></span>Transactions</a>
+      <a class="on"><span class="dot"></span>Sale screen</a>
+      <a><span class="dot"></span>Documents</a>
+      <a><span class="dot"></span>Print</a>
+      <a><span class="dot"></span>Taxes &amp; GST</a>
+      <a><span class="dot"></span>Party</a>
+      <a><span class="dot"></span>Item &amp; Stock</a>
+      <a><span class="dot"></span>Numbering</a>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="height:46px;border-bottom:1px solid #EDF1F6;display:flex;align-items:center;gap:9px;padding:0 15px;flex:none">
+        <div style="font-size:15px;font-weight:660">Sale screen</div>
+        <div style="flex:1"></div>
+        <span style="font-size:10.5px;color:#8A94A6">Ethukku:</span>
+        <span style="height:25px;padding:0 11px;border-radius:8px;border:0;font-size:10.5px;font-weight:650;
+                     background:linear-gradient(135deg,#F7941D,#EE3A24);color:#fff;display:inline-flex;align-items:center">Counter A</span>
+        <span style="height:25px;padding:0 11px;border-radius:8px;border:1px solid #E2E8F0;font-size:10.5px;
+                     font-weight:620;color:#4A5568;display:inline-flex;align-items:center">Counter B</span>
+        <span style="height:25px;padding:0 11px;border-radius:8px;border:1px solid #E2E8F0;font-size:10.5px;
+                     font-weight:620;color:#4A5568;display:inline-flex;align-items:center">Ellam</span>
+      </div>
+
+      <div style="flex:1;padding:13px 15px;background:#F4F6FA;min-height:0">
+        <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;height:100%">
+          
+<div style="border:2px solid #C05621;border-radius:12px;background:#fff;
+            box-shadow:0 0 0 4px #F7941D1F, 0 12px 26px -16px rgba(192,86,33,.4);
+            overflow:hidden;display:flex;flex-direction:column;height:100%">
+  <div style="flex:1;min-height:0;padding:9px;background:#FAFBFD">
+<div style="background:#F4F6FA;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;
+            height:100%;display:flex;flex-direction:column">
+  <div style="height:17px;background:#fff;border-bottom:1px solid #EDF1F6;display:flex;align-items:center;
+              gap:5px;padding:0 7px;font-size:7.5px;font-weight:700;color:#4A5568">
+    <span style="width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#F7941D,#EE3A24)"></span>
+    Sale 
+    <span style="flex:1"></span><span style="font-size:8px;color:#A0AEC0">&#9881;</span>
+  </div>
+  <div style="flex:1;display:flex;min-height:0;padding:6px;gap:6px">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      <div style="height:16px;background:#fff;border:1.2px solid #F7941D;border-radius:5px;
+                  box-shadow:0 0 0 2px #F7941D1F;display:flex;align-items:center;padding:0 7px;
+                  font-size:7.5px;color:#A0AEC0">Barcode / item per…</div>
+      
+      <div style="flex:1;background:#fff;border:1px solid #E9EDF3;border-radius:6px;overflow:hidden;min-height:48px">
+        <div style="display:flex;padding:4px 7px;background:#F7F9FC;font-size:6.5px;font-weight:750;color:#8A94A6">
+          <span style="flex:1">ITEM</span><span style="width:24px;text-align:right">QTY</span>
+          <span style="width:38px;text-align:right">RATE</span><span style="width:44px;text-align:right">AMT</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start;
+                    border-bottom:1px solid #F5F7FA">
+          <span style="flex:1">Idli Rice 25kg<span style="display:block;font-size:6.5px;color:#8A94A6">Batch R2411 · Exp 06/27 · MRP 1,350 · GST 5%</span></span>
+          <span style="width:24px;text-align:right">2</span>
+          <span style="width:38px;text-align:right">1,240</span>
+          <span style="width:44px;text-align:right;font-weight:680">2,480</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start">
+          <span style="flex:1">Toor Dal 1kg<span style="display:block;font-size:6.5px;color:#8A94A6">Batch TD07 · Exp 11/26 · GST 5%</span></span>
+          <span style="width:24px;text-align:right">10</span>
+          <span style="width:38px;text-align:right">148</span>
+          <span style="width:44px;text-align:right;font-weight:680">1,480</span></div>
+      </div>
+    </div>
+    <div style="width:27mm;flex:none;background:#fff;border:1px solid #E9EDF3;border-radius:6px;
+                      padding:7px;display:flex;flex-direction:column">
+        <div style="font-size:6.5px;font-weight:750;color:#8A94A6">MOTTHAM</div>
+        <div style="font-size:17px;font-weight:730;letter-spacing:-.7px;color:#1F2937" class="num">₹5,147</div>
+        <div style="flex:1"></div>
+        
+        <div style="height:16px;border-radius:5px;background:linear-gradient(135deg,#F7941D,#EE3A24);
+             color:#fff;font-size:7.5px;font-weight:700;display:grid;place-items:center">Bill podu</div>
+      </div>
+  </div>
+  
+</div></div>
+  <div style="padding:9px 12px;border-top:1px solid #F1F4F8;display:flex;align-items:center;gap:8px">
+    <span style="width:15px;height:15px;border-radius:50%;flex:none;
+                 border:4.5px solid #C05621;background:#fff"></span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block;font-size:13px;font-weight:660;color:#1F2937">Counter billing</span>
+      <span style="display:block;font-size:10px;color:#8A94A6;margin-top:1px">Kirana · pharmacy · B2B</span>
+    </span>
+    <span style="font-size:8.5px;font-weight:750;padding:3px 9px;border-radius:99px;background:#FFF8F1;color:#C05621">IPPO IDHU</span>
+  </div>
+</div>
+          
+<div style="border:1px solid #E9EDF3;border-radius:12px;background:#fff;
+            box-shadow:0 10px 22px -16px rgba(31,41,55,.22);
+            overflow:hidden;display:flex;flex-direction:column;height:100%">
+  <div style="flex:1;min-height:0;padding:9px;background:#FAFBFD">
+<div style="background:#F4F6FA;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;
+            height:100%;display:flex;flex-direction:column">
+  <div style="height:17px;background:#fff;border-bottom:1px solid #EDF1F6;display:flex;align-items:center;
+              gap:5px;padding:0 7px;font-size:7.5px;font-weight:700;color:#4A5568">
+    <span style="width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#F7941D,#EE3A24)"></span>
+    Sale 
+    <span style="flex:1"></span><span style="font-size:8px;color:#A0AEC0">&#9881;</span>
+  </div>
+  <div style="flex:1;display:flex;min-height:0;padding:6px;gap:6px">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      <div style="height:16px;background:#fff;border:1.2px solid #F7941D;border-radius:5px;
+                  box-shadow:0 0 0 2px #F7941D1F;display:flex;align-items:center;padding:0 7px;
+                  font-size:7.5px;color:#A0AEC0">Barcode / item per…</div>
+      
+      <div style="flex:1;background:#fff;border:1px solid #E9EDF3;border-radius:6px;overflow:hidden;min-height:48px">
+        <div style="display:flex;padding:4px 7px;background:#F7F9FC;font-size:6.5px;font-weight:750;color:#8A94A6">
+          <span style="flex:1">ITEM</span><span style="width:24px;text-align:right">QTY</span>
+          <span style="width:38px;text-align:right">RATE</span><span style="width:44px;text-align:right">AMT</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start;
+                    border-bottom:1px solid #F5F7FA">
+          <span style="flex:1">Idli Rice 25kg</span>
+          <span style="width:24px;text-align:right">2</span>
+          <span style="width:38px;text-align:right">1,240</span>
+          <span style="width:44px;text-align:right;font-weight:680">2,480</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start">
+          <span style="flex:1">Toor Dal 1kg</span>
+          <span style="width:24px;text-align:right">10</span>
+          <span style="width:38px;text-align:right">148</span>
+          <span style="width:44px;text-align:right;font-weight:680">1,480</span></div>
+      </div>
+    </div>
+    <div style="width:27mm;flex:none;background:#fff;border:1px solid #E9EDF3;border-radius:6px;
+                      padding:7px;display:flex;flex-direction:column">
+        <div style="font-size:6.5px;font-weight:750;color:#8A94A6">MOTTHAM</div>
+        <div style="font-size:17px;font-weight:730;letter-spacing:-.7px;color:#1F2937" class="num">₹5,147</div>
+        <div style="flex:1"></div>
+        
+        <div style="height:16px;border-radius:5px;background:linear-gradient(135deg,#F7941D,#EE3A24);
+             color:#fff;font-size:7.5px;font-weight:700;display:grid;place-items:center">Bill podu</div>
+      </div>
+  </div>
+  
+</div></div>
+  <div style="padding:9px 12px;border-top:1px solid #F1F4F8;display:flex;align-items:center;gap:8px">
+    <span style="width:15px;height:15px;border-radius:50%;flex:none;
+                 border:1.5px solid #CBD5E0;background:#fff"></span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block;font-size:13px;font-weight:660;color:#1F2937">Simple billing</span>
+      <span style="display:block;font-size:10px;color:#8A94A6;margin-top:1px">Chinna kadai · item, qty, rate</span>
+    </span>
+    
+  </div>
+</div>
+          
+<div style="border:1px solid #E9EDF3;border-radius:12px;background:#fff;
+            box-shadow:0 10px 22px -16px rgba(31,41,55,.22);
+            overflow:hidden;display:flex;flex-direction:column;height:100%">
+  <div style="flex:1;min-height:0;padding:9px;background:#FAFBFD">
+<div style="background:#F4F6FA;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;
+            height:100%;display:flex;flex-direction:column">
+  <div style="height:17px;background:#fff;border-bottom:1px solid #EDF1F6;display:flex;align-items:center;
+              gap:5px;padding:0 7px;font-size:7.5px;font-weight:700;color:#4A5568">
+    <span style="width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#F7941D,#EE3A24)"></span>
+    Sale 
+    <span style="flex:1"></span><span style="font-size:8px;color:#A0AEC0">&#9881;</span>
+  </div>
+  <div style="flex:1;display:flex;min-height:0;padding:6px;gap:6px">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      <div style="height:16px;background:#fff;border:1.2px solid #F7941D;border-radius:5px;
+                  box-shadow:0 0 0 2px #F7941D1F;display:flex;align-items:center;padding:0 7px;
+                  font-size:7.5px;color:#A0AEC0">Barcode / item per…</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+                   <span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Chicken 65</span>
+      <span style="font-size:9px;font-weight:720;color:#B91C1C" class="num">₹220</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#F0F7FF;border:1px solid #D6E6FC;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Parotta</span>
+      <span style="font-size:9px;font-weight:720;color:#1D4ED8" class="num">₹25</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Biryani</span>
+      <span style="font-size:9px;font-weight:720;color:#B91C1C" class="num">₹260</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#ECFDF5;border:1px solid #C5EFDD;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Lime Soda</span>
+      <span style="font-size:9px;font-weight:720;color:#047857" class="num">₹60</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#F0F7FF;border:1px solid #D6E6FC;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Dal Tadka</span>
+      <span style="font-size:9px;font-weight:720;color:#1D4ED8" class="num">₹140</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#ECFDF5;border:1px solid #C5EFDD;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Tea</span>
+      <span style="font-size:9px;font-weight:720;color:#047857" class="num">₹20</span></span></div>
+      <div style="flex:1;background:#fff;border:1px solid #E9EDF3;border-radius:6px;overflow:hidden;min-height:48px">
+        <div style="display:flex;padding:4px 7px;background:#F7F9FC;font-size:6.5px;font-weight:750;color:#8A94A6">
+          <span style="flex:1">ITEM</span><span style="width:24px;text-align:right">QTY</span>
+          <span style="width:38px;text-align:right">RATE</span><span style="width:44px;text-align:right">AMT</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start;
+                    border-bottom:1px solid #F5F7FA">
+          <span style="flex:1">Idli Rice 25kg</span>
+          <span style="width:24px;text-align:right">2</span>
+          <span style="width:38px;text-align:right">1,240</span>
+          <span style="width:44px;text-align:right;font-weight:680">2,480</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start">
+          <span style="flex:1">Toor Dal 1kg</span>
+          <span style="width:24px;text-align:right">10</span>
+          <span style="width:38px;text-align:right">148</span>
+          <span style="width:44px;text-align:right;font-weight:680">1,480</span></div>
+      </div>
+    </div>
+    
+  </div>
+  <div style="height:24px;background:#fff;border-top:1px solid #EDF1F6;display:flex;
+      align-items:center;gap:7px;padding:0 8px">
+      <span style="font-size:6.5px;font-weight:750;color:#8A94A6">MOTTHAM</span>
+      <span style="font-size:15px;font-weight:730;letter-spacing:-.5px" class="num">₹5,147</span>
+      <span style="flex:1"></span>
+      
+      <span style="height:15px;padding:0 9px;border-radius:5px;background:linear-gradient(135deg,#F7941D,#EE3A24);color:#fff;font-size:7.5px;font-weight:700;display:grid;place-items:center">Bill podu</span>
+    </div>
+</div></div>
+  <div style="padding:9px 12px;border-top:1px solid #F1F4F8;display:flex;align-items:center;gap:8px">
+    <span style="width:15px;height:15px;border-radius:50%;flex:none;
+                 border:1.5px solid #CBD5E0;background:#fff"></span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block;font-size:13px;font-weight:660;color:#1F2937">Thottu billing</span>
+      <span style="display:block;font-size:10px;color:#8A94A6;margin-top:1px">Bakery · kaai counter · parcel</span>
+    </span>
+    
+  </div>
+</div>
+          
+<div style="border:1px solid #E9EDF3;border-radius:12px;background:#fff;
+            box-shadow:0 10px 22px -16px rgba(31,41,55,.22);
+            overflow:hidden;display:flex;flex-direction:column;height:100%">
+  <div style="flex:1;min-height:0;padding:9px;background:#FAFBFD">
+<div style="background:#F4F6FA;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;
+            height:100%;display:flex;flex-direction:column">
+  <div style="height:17px;background:#fff;border-bottom:1px solid #EDF1F6;display:flex;align-items:center;
+              gap:5px;padding:0 7px;font-size:7.5px;font-weight:700;color:#4A5568">
+    <span style="width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#F7941D,#EE3A24)"></span>
+    Sale <span style="padding:1px 5px;border-radius:99px;background:#FFF7E6;color:#B45309;font-size:6.5px">Table 7</span>
+    <span style="flex:1"></span><span style="font-size:8px;color:#A0AEC0">&#9881;</span>
+  </div>
+  <div style="flex:1;display:flex;min-height:0;padding:6px;gap:6px">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+                   <span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Chicken 65</span>
+      <span style="font-size:9px;font-weight:720;color:#B91C1C" class="num">₹220</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#F0F7FF;border:1px solid #D6E6FC;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Parotta</span>
+      <span style="font-size:9px;font-weight:720;color:#1D4ED8" class="num">₹25</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Biryani</span>
+      <span style="font-size:9px;font-weight:720;color:#B91C1C" class="num">₹260</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#ECFDF5;border:1px solid #C5EFDD;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Lime Soda</span>
+      <span style="font-size:9px;font-weight:720;color:#047857" class="num">₹60</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#F0F7FF;border:1px solid #D6E6FC;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Dal Tadka</span>
+      <span style="font-size:9px;font-weight:720;color:#1D4ED8" class="num">₹140</span></span><span style="display:flex;flex-direction:column;justify-content:space-between;height:11mm;
+      padding:4px 5px;background:#ECFDF5;border:1px solid #C5EFDD;border-radius:6px">
+      <span style="font-size:8px;font-weight:640;color:#1F2937;line-height:1.15">Tea</span>
+      <span style="font-size:9px;font-weight:720;color:#047857" class="num">₹20</span></span></div>
+      <div style="flex:1;background:#fff;border:1px solid #E9EDF3;border-radius:6px;overflow:hidden;min-height:48px">
+        <div style="display:flex;padding:4px 7px;background:#F7F9FC;font-size:6.5px;font-weight:750;color:#8A94A6">
+          <span style="flex:1">ITEM</span><span style="width:24px;text-align:right">QTY</span>
+          <span style="width:38px;text-align:right">RATE</span><span style="width:44px;text-align:right">AMT</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start;
+                    border-bottom:1px solid #F5F7FA">
+          <span style="flex:1">Idli Rice 25kg</span>
+          <span style="width:24px;text-align:right">2</span>
+          <span style="width:38px;text-align:right">1,240</span>
+          <span style="width:44px;text-align:right;font-weight:680">2,480</span></div>
+        <div style="display:flex;padding:5px 7px;font-size:8px;color:#1F2937;align-items:flex-start">
+          <span style="flex:1">Toor Dal 1kg</span>
+          <span style="width:24px;text-align:right">10</span>
+          <span style="width:38px;text-align:right">148</span>
+          <span style="width:44px;text-align:right;font-weight:680">1,480</span></div>
+      </div>
+    </div>
+    <div style="width:27mm;flex:none;background:#fff;border:1px solid #E9EDF3;border-radius:6px;
+                      padding:7px;display:flex;flex-direction:column">
+        <div style="font-size:6.5px;font-weight:750;color:#8A94A6">MOTTHAM</div>
+        <div style="font-size:17px;font-weight:730;letter-spacing:-.7px;color:#1F2937" class="num">₹5,147</div>
+        <div style="flex:1"></div>
+        <div style="height:15px;border-radius:5px;background:#1F2937;color:#fff;font-size:7px;
+                   display:grid;place-items:center;margin-bottom:4px">Samaiyalarai</div>
+        <div style="height:16px;border-radius:5px;background:linear-gradient(135deg,#F7941D,#EE3A24);
+             color:#fff;font-size:7.5px;font-weight:700;display:grid;place-items:center">Bill podu</div>
+      </div>
+  </div>
+  
+</div></div>
+  <div style="padding:9px 12px;border-top:1px solid #F1F4F8;display:flex;align-items:center;gap:8px">
+    <span style="width:15px;height:15px;border-radius:50%;flex:none;
+                 border:1.5px solid #CBD5E0;background:#fff"></span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block;font-size:13px;font-weight:660;color:#1F2937">Table service</span>
+      <span style="display:block;font-size:10px;color:#8A94A6;margin-top:1px">Hotel · restaurant · bar</span>
+    </span>
+    
+  </div>
+</div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #EDF1F6;padding:10px 15px;display:flex;align-items:center;gap:9px;flex:none">
+        <span style="font-size:11px;color:#8A94A6">
+          Column, KOT, total idam — chinna maattam venum-naa
+          <b style="color:#4A5568">sale screen-oda &#9881; gear-la</b>
+        </span>
+        <div style="flex:1"></div>
+        <span style="height:28px;padding:0 13px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;
+                     font-size:11px;font-weight:620;color:#4A5568;display:inline-flex;align-items:center">Reset</span>
+        <span style="height:28px;padding:0 15px;border-radius:8px;border:0;font-size:11.5px;font-weight:680;
+                     background:linear-gradient(135deg,#F7941D,#EE3A24);color:#fff;
+                     box-shadow:0 6px 16px -5px #EE3A2455;display:inline-flex;align-items:center">Save</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Naalu per · naalu padam · oru click. Meedhi ellam gear-ku pin-naadi.</div>
+</div>
+
+</body></html>

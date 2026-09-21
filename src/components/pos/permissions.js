@@ -38,14 +38,33 @@ export const SCREEN_PERMISSION = {
     category:           P.ReadCatalog,
     barcode:            P.ReadCatalog,
     'tax-master':       P.ReadCatalog,   // viewing rates; editing needs settings.update
+    // Both change how documents are numbered and how quantities convert, which
+    // affects every bill from that point on — an owner-level decision.
+    'unit-settings':    P.UpdateSettings,
+    'numbering-settings': P.UpdateSettings,
+    // Changing a bill layout changes every document printed from then on.
+    'print-templates':  P.UpdateSettings,
+    // Choosing a business type changes what the whole application offers.
+    'business-setup':   P.UpdateSettings,
     inventory:          P.ReadCatalog,
     'stock-updation':   P.UpdateCatalog,
+    repack:             P.UpdateCatalog,
+    batches:            P.ReadCatalog,
+    // What the shop adds to every bill is an owner-level decision.
+    charges:            P.UpdateSettings,
+    // A waiter opens tables and rings orders, which is the till's own right.
+    restaurant:         P.CreateOrder,
+    // How much a buyer may owe is an owner's call, not a till operator's.
+    'credit-limits':    P.UpdateCustomer,
     'stock-adjustment': P.UpdateCatalog,
     purchase:           P.ReadCatalog,
     'purchase-list':    P.ReadCatalog,
     'purchase-return':  P.UpdateCatalog,
     inward:             P.UpdateCatalog,
     customers:          P.ReadCustomer,
+    // Trial Balance, P and L and Balance Sheet expose the whole business, so
+    // reading them is a settings-level permission rather than an order one.
+    accounts:           P.ReadSettings,
     ledger:             P.ReadOrder,
     payment:            P.ReadOrder,
     receipt:            P.ReadOrder,

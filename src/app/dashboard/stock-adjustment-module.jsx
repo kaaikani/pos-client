@@ -1,11 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { Sliders, Save, AlertCircle, Plus, Minus, Loader2, RefreshCw } from 'lucide-react';
 import {
     ListItemsQuery,
     ListStockAdjustmentsQuery,
     CreateStockAdjustmentCommand,
-} from '../../core/queries/pharma.query';
+} from '../../core/queries/pos.query';
 
 /**
  * Stock Adjustment — server-backed (BUG-001, BUG-003).
@@ -40,6 +41,8 @@ const makeAdjNo = (seq) => {
 };
 
 export default function StockAdjustmentModule() {
+    const searchRef = usePageFocus();
+
     const [items, setItems] = useState([]);
     const [logs, setLogs] = useState([]);
     const [search, setSearch] = useState('');
@@ -154,7 +157,7 @@ export default function StockAdjustmentModule() {
         )}
 
         <div className="p-4 bg-white border-b border-amber-200">
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search item by name or code..." className="w-full max-w-md px-4 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold outline-none focus:border-amber-500"/>
+            <input ref={searchRef} value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search item by name or code..." className="w-full max-w-md px-4 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold outline-none focus:border-amber-500"/>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-3">

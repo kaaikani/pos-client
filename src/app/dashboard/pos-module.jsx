@@ -1,29 +1,29 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LookupBarcodeQuery } from '../../core/queries/PosQueries';
-import { ListItemsQuery, CreateSaleCommand, ListSalesQuery, DeleteSaleCommand, PosTaxMastersQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery, CreateSaleCommand, ListSalesQuery, DeleteSaleCommand, PosTaxMastersQuery, ItemForTransactionQuery, PosResolveRateQuery, PosSettingQuery } from '../../core/queries/pos.query';
+import { useModule } from '../../components/pos';
+import {
+    PosPartyCreditStatusQuery, PosItemBatchesQuery,
+    PosChargesQuery, PosChargePreviewQuery,
+} from '../../core/queries/pos.query';
 import { invalidateCache } from '../../core/queries/cache';
 import { gql } from '../../core/queries/gql';
 import InvoicePreviewModal from '../../components/invoice/InvoicePreviewModal';
 import { computeCartTotals } from '../../core/pos/cart-tax';
 
 // Common unit presets — covers weight (fruits/vegetables), count (biscuits/choc), volume (milk)
-const COMMON_UNITS = [
-    '1 Pc', '1 Pack', '1 Box', '1 Dozen',
-    '50 g', '100 g', '200 g', '250 g', '500 g', '750 g',
-    '1 kg', '1.5 kg', '2 kg', '5 kg',
-    '1/4 kg', '1/2 kg', '3/4 kg',
-    '100 ml', '250 ml', '500 ml', '1 L', '2 L', '5 L',
-];
-
-// Detect if an item is weight-based to pick a sensible default unit
+/**
+ * The unit a row starts in: the item's own base unit, or nothing.
+ *
+ * This used to guess a LABEL from the item's category — "1 kg", "1 Pc", "1 L" —
+ * which read fine on the bill but is not a code in the unit master. Now that the
+ * unit reaches the server and drives the stock conversion, a guessed label would
+ * be rejected outright. The base unit is the only safe default; anything else is
+ * chosen from the item's allowed units.
+ */
 function defaultUnitFor(item) {
-    if (!item) return '1 Pc';
-    if (item.isWeightBased) return '1 kg';
-    const cat = (item.category || '').toLowerCase();
-    if (/fruit|vegetable|veg|pulse|grain|rice|atta|flour|sugar|salt/i.test(cat)) return '1 kg';
-    if (/milk|oil|water|juice|drink/i.test(cat)) return '1 L';
-    return '1 Pc';
+    return String(item?.unit || '').trim();
 }
 const BILL_SIZES = {
     '3inch': { label: '3"', width: '76mm', css: '@page{size:76mm auto;margin:2mm}' },
@@ -37,7 +37,7 @@ const BILL_SIZES = {
 function saveToReport(order) { try { const e = JSON.parse(localStorage.getItem('pos_reports') || '[]'); e.unshift({ ...order, timestamp: new Date().toISOString() }); localStorage.setItem('pos_reports', JSON.stringify(e)); } catch {} }
 
 export default function PosModule() {
-    const [pharmaItems, setPharmaItems] = useState([]);
+    const [posItems, setPosItems] = useState([]);
     const [billNo, setBillNo] = useState('');
     const [lastBillNo, setLastBillNo] = useState('3');
     const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
@@ -77,6 +77,67 @@ export default function PosModule() {
     const searchRef = useRef(null);
 
     // Inline row autocomplete (item name / code)
+    // itemCode -> the units the server allows for it, with each one's conversion
+    // to the item's base unit. Filled on demand when a row is filled, and kept
+    // for the session because it changes only when Item Master changes.
+    const [unitsByItem, setUnitsByItem] = useState({});
+
+    // Which price list this bill is on. One toggle switches every line, which is
+    // how a shop actually works — a customer is a trade customer for the whole
+    // bill, not line by line.
+    const [priceTier, setPriceTier] = useState('SALE');
+
+    // Where the order came from, which is a different question from how it was
+    // paid for. A Swiggy order is settled ONLINE by Swiggy; a phone order is
+    // usually cash on delivery. Keeping them apart is what lets a restaurant
+    // ask "how much did we do on Zomato last month" without that figure being
+    // mixed in with every card swipe at the counter.
+    const [orderSource, setOrderSource] = useState('COUNTER');
+
+    /**
+     * What this customer already owes, shown the moment CREDIT is chosen.
+     *
+     * The server refuses a bill that goes over the limit, but finding that out
+     * only when Save is pressed means the goods are already packed and the
+     * customer is standing there. Showing the position while the bill is being
+     * rung is the difference between "take 500 in cash" and an argument.
+     */
+    const [credit, setCredit] = useState(null);
+
+    /**
+     * Batches per item code, loaded the first time a row's batch cell is opened.
+     *
+     * Leaving the cell blank is the normal case and means first-expiry-first-out
+     * — the operator only names a batch when the customer's own pack has to be
+     * matched, which is a pharmacy counter's job, not a supermarket's.
+     */
+    /**
+     * The shop's own charges — delivery, packing, service, whatever it created.
+     *
+     * `chargeDefs` is what this shop offers; `chargeTyped` is what the operator
+     * has typed for the ones that need it; `chargePreview` is what the SERVER
+     * says they come to. The till never does this arithmetic itself: the same
+     * server will refuse a total it disagrees with when the bill is saved, so
+     * the number on screen and the number on the bill cannot differ.
+     */
+    const [chargeDefs, setChargeDefs] = useState([]);
+    const [chargeTyped, setChargeTyped] = useState({});
+    const [chargePreview, setChargePreview] = useState({ lines: [], chargesTotal: 0, chargesTax: 0 });
+
+    const [rowBatches, setRowBatches] = useState({});
+    const [batchDropdownRow, setBatchDropdownRow] = useState(-1);
+
+    // Without price lists there is only one rate, so a retail/wholesale switch
+    // would be a control that changes nothing.
+    const priceListsOn = useModule('priceTiers');
+    const creditLimitOn = useModule('creditLimit');
+    const batchOn = useModule('batchTracking');
+
+    // Whether the operator may type over the price list. Read from the server,
+    // which enforces it as well; a read-only box alone stops honest mistakes,
+    // not deliberate ones.
+    const [allowRateEdit, setAllowRateEdit] = useState(true);
+    const [scanNote, setScanNote] = useState('');       // what the last scan resolved to, or why it failed
     const [suggestRow, setSuggestRow] = useState(-1);   // which row's input is active
     const [suggestField, setSuggestField] = useState(''); // 'itemName' | 'code'
     const [suggestSelIdx, setSuggestSelIdx] = useState(0);
@@ -130,47 +191,57 @@ export default function PosModule() {
     const [showNameSuggest, setShowNameSuggest] = useState(false);
     const [nameSuggestSelIdx, setNameSuggestSelIdx] = useState(0);
     const [pickedCustomerId, setPickedCustomerId] = useState(null);
+    useEffect(() => {
+        // A shop with no charges gets an empty list and nothing on screen
+        // changes — which is most shops.
+        new PosChargesQuery().execute('SALE')
+            .then(setChargeDefs)
+            .catch(() => setChargeDefs([]));
+    }, []);
+
+    useEffect(() => {
+        const name = customerName.trim();
+        if (!creditLimitOn || mode !== 'CREDIT' || !name) { setCredit(null); return; }
+        let live = true;
+        // Debounced: the name is being typed, and a lookup per keystroke would
+        // both hammer the server and flicker the warning.
+        const t = setTimeout(async () => {
+            try {
+                const st = await new PosPartyCreditStatusQuery().execute(name, 'CUSTOMER');
+                if (live) setCredit(st);
+            } catch {
+                // A failed lookup must not block a sale. The server still
+                // enforces the limit when the bill is saved.
+                if (live) setCredit(null);
+            }
+        }, 400);
+        return () => { live = false; clearTimeout(t); };
+    }, [creditLimitOn, mode, customerName]);
+
     const itemNameInputsRef = useRef({});
 
     useEffect(() => {
         setDate(new Date().toLocaleDateString('en-GB'));
         // Force fresh fetch on POS open so newly-added items / size variants are picked up
-        invalidateCache('pharma:items');
-        new ListItemsQuery().execute().then(setPharmaItems).catch(e => console.error(e));
+        invalidateCache('pos:items');
+        new ListItemsQuery().execute().then(setPosItems).catch(e => console.error(e));
+        // Default to allowing edits if the setting cannot be read, so a network
+        // hiccup never locks a till that was meant to be open.
+        new PosSettingQuery().execute()
+            .then(s => setAllowRateEdit(s?.allowRateEdit !== false))
+            .catch(() => setAllowRateEdit(true));
         new PosTaxMastersQuery().execute().then(setTaxMasters).catch(() => {});
         // Load parked bills
         try { setParkedBills(JSON.parse(localStorage.getItem('pos_parked_bills') || '[]')); } catch {}
 
-        // Sync Bill No: new bill = max existing + 1.
-        // Deleted bill numbers are NOT reused — existing bills keep their original numbers,
-        // so a deletion never affects other bills' identity.
-        // e.g. 1,2,3,4,5,6,7,8,9,10 exist → delete 5 → remaining 1,2,3,4,6,7,8,9,10 → next = 11.
-        (async () => {
-            let maxBillNo = 0;
-            try {
-                const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
-                for (const r of reports) {
-                    const n = parseInt(r.billNo, 10);
-                    if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
-                }
-            } catch {}
-            try {
-                const dbSales = await new ListSalesQuery().execute();
-                for (const s of (dbSales || [])) {
-                    const n = parseInt(s.billNo, 10);
-                    if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
-                }
-            } catch {}
-            // Also remember the highest-ever bill number seen, so that deleting the latest
-            // bill does NOT cause the counter to roll back.
-            try {
-                const seen = parseInt(localStorage.getItem('pos_max_billno_ever') || '0', 10);
-                if (!isNaN(seen) && seen > maxBillNo) maxBillNo = seen;
-            } catch {}
-            setLastBillNo(String(maxBillNo));
-            setBillNo(String(maxBillNo + 1));
-        })();
-
+        // The bill number is issued by the SERVER when the sale is saved, from a
+        // counter held under a row lock inside createSale's own transaction.
+        //
+        // It used to be worked out here — highest number seen, plus one, with the
+        // highest-ever value cached in localStorage so a deletion could not roll
+        // it back. Two tills reading that separately both arrived at the same
+        // next number, and a cleared cache started the count again. Nothing on
+        // this screen decides the number any more.
         // Auto-focus the first ItemName input on load
         setTimeout(() => { itemNameInputsRef.current[0]?.focus(); }, 200);
     }, []);
@@ -190,9 +261,9 @@ export default function PosModule() {
     // identical and within the server's ±₹1 grand-total tolerance.
     const itemsByCode = React.useMemo(() => {
         const m = new Map();
-        for (const it of pharmaItems) m.set(String(it.code), it);
+        for (const it of posItems) m.set(String(it.code), it);
         return m;
-    }, [pharmaItems]);
+    }, [posItems]);
     const taxMastersById = React.useMemo(() => {
         const m = new Map();
         for (const t of taxMasters) m.set(Number(t.id), t);
@@ -202,10 +273,48 @@ export default function PosModule() {
         () => computeCartTotals(rows, itemsByCode, taxMastersById, { otherState: nonAcc, discount: discAmt, transport: transportAmt }),
         [rows, itemsByCode, taxMastersById, nonAcc, discAmt, transportAmt],
     );
+    /**
+     * Ask the server what the charges come to, whenever the bill changes.
+     *
+     * Debounced, because it fires on every keystroke in the quantity column.
+     * A failure leaves the previous figures rather than zeroing them: the
+     * server recomputes on save regardless, and a total that flickers to zero
+     * mid-bill would be read as the charge having been removed.
+     */
+    useEffect(() => {
+        if (chargeDefs.length === 0) {
+            setChargePreview({ lines: [], chargesTotal: 0, chargesTax: 0 });
+            return;
+        }
+        let live = true;
+        const t = setTimeout(async () => {
+            try {
+                const applied = Object.entries(chargeTyped)
+                    .filter(([, v]) => String(v).trim() !== '')
+                    .map(([code, v]) => ({ code, amount: Number(v) || 0 }));
+                const p = await new PosChargePreviewQuery().execute({
+                    scope: 'SALE',
+                    itemsTotal: taxType === 'WTax' ? cartTax.grandTotal : subTotal + transportAmt,
+                    discount: discAmt,
+                    applied,
+                });
+                if (live) setChargePreview(p);
+            } catch { /* keep the last good figures */ }
+        }, 250);
+        return () => { live = false; clearTimeout(t); };
+    }, [chargeDefs, chargeTyped, subTotal, discAmt, transportAmt, taxType, cartTax.grandTotal]);
+
     const taxAmount = taxType === 'WTax' ? cartTax.taxAmount : 0;
-    const grandTotal = taxType === 'WTax'
+    const goodsTotal = taxType === 'WTax'
         ? cartTax.grandTotal
         : Math.round((subTotal + transportAmt - discAmt) * 100) / 100;
+    // The charges and their own GST are part of what the customer pays. Both
+    // figures come from the server, so this addition is the only arithmetic the
+    // till does with them.
+    const chargesDue = Math.round(
+        ((chargePreview.chargesTotal || 0) + (chargePreview.chargesTax || 0)) * 100,
+    ) / 100;
+    const grandTotal = Math.round((goodsTotal + chargesDue) * 100) / 100;
     const receivedA = parseFloat(receivedAmt) || 0;
     const balance = Math.round((grandTotal - receivedA) * 100) / 100;
 
@@ -216,7 +325,7 @@ export default function PosModule() {
         if (field === 'qty') {
             const r = rows[idx];
             if (r && r.itemName) {
-                const prod = pharmaItems.find(p => p.code === r.code || p.itemName === r.itemName);
+                const prod = posItems.find(p => p.code === r.code || p.itemName === r.itemName);
                 if (prod && prod.isStockBased === true) {
                     const stock = prod.minStkQty != null && prod.minStkQty !== '' ? parseFloat(prod.minStkQty)
                                 : prod.minStock != null && prod.minStock !== '' ? parseFloat(prod.minStock)
@@ -255,10 +364,10 @@ export default function PosModule() {
         return sizes.filter(s => s && s.size && s.size !== 'NA' && (parseFloat(s.rate) || 0) > 0);
     };
 
-    // Lookup variants for a cart row by matching code/itemName against pharmaItems master
+    // Lookup variants for a cart row by matching code/itemName against posItems master
     const getRowVariants = (row) => {
         if (!row?.itemName) return [];
-        const prod = pharmaItems.find(p => p.code === row.code || p.itemName === row.itemName);
+        const prod = posItems.find(p => p.code === row.code || p.itemName === row.itemName);
         return prod ? getItemVariants(prod) : [];
     };
 
@@ -275,7 +384,7 @@ export default function PosModule() {
         setUnitDropdownRow(-1);
     };
 
-    // Read available stock from a pharma item (minStkQty preferred, else minStock)
+    // Read available stock from a POS item (minStkQty preferred, else minStock)
     const getItemStock = (item) => {
         if (!item) return null;
         if (item.minStkQty != null && item.minStkQty !== '') return parseFloat(item.minStkQty);
@@ -315,13 +424,169 @@ export default function PosModule() {
         }
 
         // Default to first size variant if available, else item's base rate
+        // Load the units this item may transact in, so the Unit cell is ready by
+        // the time the operator reaches it.
+        void ensureUnitsFor(item.code);
+
         const variants = getItemVariants(item);
         const defaultVariant = variants.length > 0 ? variants[0] : null;
         finalizePickItem(item, defaultVariant);
     };
 
-    // Final cart-row insertion (with optional size variant override)
-    const finalizePickItem = (item, variant) => {
+    /**
+     * Loads and caches the units allowed for one item.
+     *
+     * The unit cell used to offer a fixed list of labels — "1 kg", "500 g",
+     * "1 Pc" — none of which are codes in the unit master, and the sale payload
+     * never sent the unit at all. So picking "500 g" changed the printed line
+     * but took a whole kilogram out of stock. The cell now offers only units the
+     * server will actually accept for this item.
+     */
+    const ensureUnitsFor = useCallback(async (code) => {
+        const key = String(code || '');
+        if (!key || unitsByItem[key]) return unitsByItem[key];
+        try {
+            const found = await new ItemForTransactionQuery().execute({ code: key });
+            const list = found?.allowedUnits || [];
+            setUnitsByItem(prev => ({ ...prev, [key]: list }));
+            return list;
+        } catch {
+            // A lookup failure must not block billing; the cell simply falls
+            // back to the item's own unit.
+            setUnitsByItem(prev => ({ ...prev, [key]: [] }));
+            return [];
+        }
+    }, [unitsByItem]);
+
+    /** The allowed units for a cart row, or an empty list if none are known. */
+    const getRowUnits = (row) => unitsByItem[String(row?.code || '')] || [];
+
+    /** Decimal places the chosen unit is counted in. Grams are whole numbers. */
+    const decimalsForRowUnit = (row) => {
+        const u = getRowUnits(row).find(x => x.unitCode === row.unit);
+        return u && Number.isFinite(u.decimals) ? u.decimals : 3;
+    };
+
+    /**
+     * Puts the price list's rate on a row, for the unit and quantity it holds.
+     *
+     * The server decides the figure, not this screen. A 25 KG bag is priced as a
+     * bag when a bag price exists, and only falls back to the kilo rate times
+     * the conversion when it does not — and the same call is what the server
+     * checks the saved bill against, so the two can never disagree.
+     */
+    const applyPriceToRow = async (rowIdx, code, unitCode, qty) => {
+        if (!code) return;
+        try {
+            const res = await new PosResolveRateQuery().execute({
+                itemCode: code, unitCode, tierType: priceTier, qty: Number(qty) || 0,
+            });
+            if (!res) return;
+            setRows(prev => prev.map((r, i) => {
+                if (i !== rowIdx) return r;
+                const q = parseFloat(r.qty) || 0;
+                const amount = q * Number(res.rate);
+                return { ...r, rate: String(res.rate), amount: amount.toFixed(2), total: amount.toFixed(2) };
+            }));
+        } catch {
+            // Pricing is advisory on this screen; the server re-checks on save.
+        }
+    };
+
+    /**
+     * The batches of one item, fetched once and kept for the rest of the bill.
+     *
+     * A failed fetch leaves the list empty rather than blocking the row: the
+     * operator can still ring the line, and the server picks the nearest expiry.
+     */
+    const loadRowBatches = async (code) => {
+        const key = String(code || '');
+        if (!key || rowBatches[key]) return;
+        try {
+            const list = await new PosItemBatchesQuery().execute(key, false);
+            setRowBatches(p => ({ ...p, [key]: list.filter(b => b.status === 'ACTIVE') }));
+        } catch {
+            setRowBatches(p => ({ ...p, [key]: [] }));
+        }
+    };
+
+    /** Switches a row to another unit, then re-prices it for that unit. */
+    const applyUnitToRow = (rowIdx, allowed) => {
+        if (!allowed) return;
+        let code = '';
+        let qty = 0;
+        setRows(prev => prev.map((r, i) => {
+            if (i !== rowIdx) return r;
+            code = r.code;
+            qty = parseFloat(r.qty) || 0;
+            return { ...r, unit: allowed.unitCode };
+        }));
+        setUnitDropdownRow(-1);
+        void applyPriceToRow(rowIdx, code, allowed.unitCode, qty);
+    };
+
+    /** Re-prices every filled line — used when the price list is switched. */
+    const repriceAllRows = (tier) => {
+        rows.forEach((r, i) => {
+            if (!r.code || !r.itemName) return;
+            void (async () => {
+                try {
+                    const res = await new PosResolveRateQuery().execute({
+                        itemCode: r.code, unitCode: r.unit, tierType: tier, qty: parseFloat(r.qty) || 0,
+                    });
+                    if (!res) return;
+                    setRows(prev => prev.map((row, idx) => {
+                        if (idx !== i) return row;
+                        const q = parseFloat(row.qty) || 0;
+                        const amount = q * Number(res.rate);
+                        return { ...row, rate: String(res.rate), amount: amount.toFixed(2), total: amount.toFixed(2) };
+                    }));
+                } catch { /* leave the line as it is */ }
+            })();
+        });
+    };
+
+    /**
+     * Resolves a scanned code on the server and puts it on the bill.
+     *
+     * Used only when the locally loaded item list has nothing matching, so
+     * ordinary typing keeps working exactly as it did. It covers the two things
+     * the till could not do before: a plain product barcode, and a weighing
+     * scale label whose weight is decoded into the quantity.
+     */
+    const scanCode = async (text, rowIdx) => {
+        const raw = String(text || '').trim();
+        if (!/^\d{8,13}$/.test(raw)) return false;
+        try {
+            const found = await new ItemForTransactionQuery().execute({ barcode: raw });
+            if (!found) return false;
+
+            // Prefer the copy already in memory so variants, stock checks and
+            // tier pricing behave identically to a normal pick.
+            const local = posItems.find(p => String(p.code) === String(found.code));
+            if (found.allowedUnits) {
+                setUnitsByItem(prev => ({ ...prev, [String(found.code)]: found.allowedUnits }));
+            }
+            setSearchRowIdx(rowIdx);
+            finalizePickItem(local || found, null, found.scanQty ?? null);
+            if (found.scanQty != null) {
+                setScanNote(`${found.itemName} — ${found.scanQty} ${found.unit || ''} from the scale label`);
+                setTimeout(() => setScanNote(''), 4000);
+            }
+            return true;
+        } catch (err) {
+            // A scale label whose PLU is not mapped comes back as a real error —
+            // the cashier needs to see it, not a silent no-match.
+            setScanNote(err.message);
+            setTimeout(() => setScanNote(''), 6000);
+            return true;
+        }
+    };
+
+    // Final cart-row insertion (with optional size variant override).
+    // qtyOverride carries a weight decoded from a scale label; without one a
+    // picked item goes on at quantity 1 exactly as before.
+    const finalizePickItem = (item, variant, qtyOverride = null) => {
         if (!item) return;
         let idx = searchRowIdx;
         let focusTarget = null; // { row, cell }
@@ -347,11 +612,18 @@ export default function PosModule() {
                 // New product → fill the row at idx (or append if idx out of range)
                 while (nr.length <= idx) nr.push({ sno: nr.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' });
                 const rate = overrideRate != null ? overrideRate : (parseFloat(item.salesRate || item.mrpRate || 0) || 0);
+                const qty = qtyOverride != null && qtyOverride > 0 ? qtyOverride : 1;
+                const lineAmount = qty * rate;
                 nr[idx] = {
                     ...nr[idx], code: item.code, itemName: item.itemName,
                     unit: dupUnit,
-                    qty: '1', rate: String(rate),
-                    amount: rate.toFixed(2), total: rate.toFixed(2),
+                    // A batch belongs to the item that was on the row before.
+                    // Carrying it over would send the server a batch number that
+                    // does not exist for the new item, and the operator would
+                    // see a refusal they had no way to predict.
+                    batchNo: '',
+                    qty: String(qty), rate: String(rate),
+                    amount: lineAmount.toFixed(2), total: lineAmount.toFixed(2),
                 };
             }
             // Clean up: keep only rows that have itemName (filled rows)
@@ -360,6 +632,9 @@ export default function PosModule() {
             nr.push({ sno: nr.length + 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' });
             // After pick: focus the Qty cell of the row we just filled, so user can adjust qty → Enter → Rate → Enter → next row.
             focusTarget = { row: filledRowIdx, cell: 'qty' };
+            // Ask the price list for this item, in the unit it went on at. Done
+            // after the row exists so the answer lands on a real line.
+            void applyPriceToRow(filledRowIdx, item.code, dupUnit, qtyOverride ?? 1);
             return nr.map((r, i) => ({ ...r, sno: i + 1 }));
         });
         setTimeout(() => {
@@ -373,11 +648,11 @@ export default function PosModule() {
 
     // When clicking a row in the cart, show that product's stock
     const selectRowForStock = (row) => {
-        const prod = pharmaItems.find(p => p.code === row.code || p.itemName === row.itemName);
+        const prod = posItems.find(p => p.code === row.code || p.itemName === row.itemName);
         if (prod) setSelectedProduct(prod);
     };
 
-    const filteredSearchItems = pharmaItems.filter(it => {
+    const filteredSearchItems = posItems.filter(it => {
         if (!searchText) return true;
         const s = searchText.toLowerCase();
         return (it.itemName || '').toLowerCase().includes(s) || String(it.code).includes(s);
@@ -389,7 +664,7 @@ export default function PosModule() {
         const s = String(text || '').trim().toLowerCase();
         if (!s) return [];
         const codeFirst = suggestField === 'code';
-        const matches = pharmaItems.filter(it =>
+        const matches = posItems.filter(it =>
             (it.itemName || '').toLowerCase().includes(s) || String(it.code || '').toLowerCase().includes(s)
         );
         const score = (it) => {
@@ -488,9 +763,10 @@ export default function PosModule() {
             : upiA >= cardA ? 'UPI' : 'CARD';
         const now = new Date();
         const saleInput = {
-            billNo: String(billNo), billDate: new Date().toISOString().split('T')[0],
+            // billNo omitted deliberately — the server allocates it.
+            billDate: new Date().toISOString().split('T')[0],
             billTime: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-            saleType: primaryMode, bookNo: book, billRef,
+            saleType: primaryMode, orderSource, priceTier, bookNo: book, billRef,
             customerName: customerName || 'Walk-in', customerPhone, customerAddress, salesMan,
             // GST compliance — backend stores these, derives invoiceType, and uses
             // placeOfSupply/otherState to decide intra vs inter-state.
@@ -498,8 +774,23 @@ export default function PosModule() {
             customerGstin: customerGstin.trim().toUpperCase(),
             placeOfSupply: placeOfSupply.trim(),
             reverseCharge,
-            items: validRows.map(r => ({ code: r.code, name: r.itemName, qty: parseFloat(r.qty), rate: parseFloat(r.rate), amount: parseFloat(r.amount) })),
+            // `unit` is sent so the server converts the quantity to the item's base
+            // unit. It was omitted before, so a line reading "500 g" still took a
+            // whole unit out of stock.
+            items: validRows.map(r => ({
+                code: r.code, name: r.itemName,
+                qty: parseFloat(r.qty), rate: parseFloat(r.rate), amount: parseFloat(r.amount),
+                ...(r.unit ? { unit: r.unit } : {}),
+                // Absent means first-expiry-first-out, which is what the server
+                // does when no batch is named.
+                ...(r.batchNo ? { batchNo: r.batchNo } : {}),
+            })),
             subtotal: subTotal, taxAmount, discount: discAmt, transportCharges: transportAmt, grandTotal,
+            // Only what the operator typed. The server decides every amount,
+            // including refusing a typed figure on a charge that is locked.
+            charges: Object.entries(chargeTyped)
+                .filter(([, v]) => String(v).trim() !== '')
+                .map(([code, v]) => ({ code, amount: Number(v) || 0 })),
             cashAmount: cashA, upiAmount: upiA, cardAmount: cardA,
             receivedAmount: totalReceived, balanceDue, changeReturned,
             remarks: header ? `[HOME DELIVERY] ${remarks || ''}`.trim() : remarks,
@@ -511,9 +802,15 @@ export default function PosModule() {
             // ⭐ SAVE TO DATABASE via GraphQL mutation
             const savedSale = await new CreateSaleCommand().execute(saleInput);
 
+            // The number the server issued. Everything downstream — the report
+            // row, the toast, the print — must use this and never a locally
+            // guessed one, or the printed bill disagrees with the database.
+            const savedBillNo = String(savedSale?.billNo || '');
+            setBillNo(savedBillNo);
+
             // Also save to local pos_reports (for legacy report module)
             const legacyPayload = {
-                invoiceId: 'BILL-' + billNo, billNo, date, mode: primaryMode, book, billRef,
+                invoiceId: 'BILL-' + savedBillNo, billNo: savedBillNo, date, mode: primaryMode, book, billRef,
                 customer: { name: customerName || 'Walk-in', phone: customerPhone, address: customerAddress },
                 salesMan, items: validRows.map(r => ({ id: r.code, name: r.itemName, barcode: r.code, price: parseFloat(r.rate), qty: parseFloat(r.qty), total: parseFloat(r.amount), quantityStr: '1 Pc' })),
                 saleType: primaryMode === 'CASH' ? 'OFFLINE' : primaryMode === 'CREDIT' ? 'CREDIT' : 'ONLINE',
@@ -536,43 +833,15 @@ export default function PosModule() {
             setShowToast(true); setTimeout(() => setShowToast(false), 5000);
 
             // Ask if user wants to print this bill
-            const wantPrint = window.confirm(`✓ Bill ${billNo} saved!\n\nDo you want to print it?\n\n• OK = Print\n• Cancel = Continue to next bill`);
+            const wantPrint = window.confirm(`✓ Bill ${savedBillNo} saved!\n\nDo you want to print it?\n\n• OK = Print\n• Cancel = Continue to next bill`);
 
-            const justSavedBillNo = parseInt(billNo) || 0;
+            setLastBillNo(savedBillNo);
 
             // Reset entire form to a clean state (Home Delivery, GST, etc.)
             handleCancel();
 
-            // Next bill = max + 1. Deleting old bills doesn't roll back the counter,
-            // because we also persist the highest-ever number to localStorage.
-            try {
-                let maxBillNo = justSavedBillNo;
-                try {
-                    const reports = JSON.parse(localStorage.getItem('pos_reports') || '[]');
-                    for (const r of reports) {
-                        const n = parseInt(r.billNo, 10);
-                        if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
-                    }
-                } catch {}
-                try {
-                    const dbSales = await new ListSalesQuery().execute();
-                    for (const s of (dbSales || [])) {
-                        const n = parseInt(s.billNo, 10);
-                        if (!isNaN(n) && n > maxBillNo) maxBillNo = n;
-                    }
-                } catch {}
-                try {
-                    const seen = parseInt(localStorage.getItem('pos_max_billno_ever') || '0', 10);
-                    if (!isNaN(seen) && seen > maxBillNo) maxBillNo = seen;
-                } catch {}
-                // Remember this so future loads never roll back even after deletions
-                try { localStorage.setItem('pos_max_billno_ever', String(maxBillNo)); } catch {}
-                setLastBillNo(String(maxBillNo));
-                setBillNo(String(maxBillNo + 1));
-            } catch {
-                setLastBillNo(String(justSavedBillNo));
-                setBillNo(String(justSavedBillNo + 1));
-            }
+            // No renumbering here. The next bill's number is issued by the server
+            // when that bill is saved.
 
             if (wantPrint) {
                 // Slight delay so React can settle before opening print window
@@ -586,7 +855,7 @@ export default function PosModule() {
 
     const handleCancel = () => {
         setRows([{ sno: 1, code: '', itemName: '', qty: '', rate: '', amount: '', total: '' }]);
-        setReceivedAmt(''); setDiscount('0'); setTransportCharges('0');
+        setReceivedAmt(''); setDiscount('0'); setTransportCharges('0'); setChargeTyped({});
         setCustomerName(''); setCustomerPhone(''); setCustomerAddress(''); setBillRef(''); setRemarks('');
         setSelectedProduct(null);
         setPickedCustomerId(null);
@@ -746,6 +1015,16 @@ export default function PosModule() {
                 }
             }
 
+            // ── Scanned barcode with no local match → ask the server ──
+            if (e.key === 'Enter' && suggestRow >= 0 && activeSuggestions.length === 0 && suggestField === 'code') {
+                const typed = rows[suggestRow]?.code;
+                if (/^\d{8,13}$/.test(String(typed || '').trim())) {
+                    e.preventDefault();
+                    scanCode(typed, suggestRow).then(hit => { if (hit) setSuggestRow(-1); });
+                    return;
+                }
+            }
+
             // ── Inline row suggestions navigation (item name / code dropdown) ──
             if (suggestRow >= 0 && activeSuggestions.length > 0) {
                 if (e.key === 'Escape') { e.preventDefault(); setSuggestRow(-1); return; }
@@ -861,7 +1140,7 @@ export default function PosModule() {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showSearch, searchSelIdx, filteredSearchItems, rows, showParkedModal, parkedSelIdx, parkedBills, focusedRow, suggestRow, suggestField, suggestSelIdx, activeSuggestions, showCustSuggest, customerSuggestions, custSuggestSelIdx, showNameSuggest, nameSuggestions, nameSuggestSelIdx, unitDropdownRow, unitDropdownSelIdx, pharmaItems, showCheckout, payCash, payUpi, payCard, payCredit, mode, grandTotal, showLastBills, customerName, customerPhone, customerAddress]);
+    }, [showSearch, searchSelIdx, filteredSearchItems, rows, showParkedModal, parkedSelIdx, parkedBills, focusedRow, suggestRow, suggestField, suggestSelIdx, activeSuggestions, showCustSuggest, customerSuggestions, custSuggestSelIdx, showNameSuggest, nameSuggestions, nameSuggestSelIdx, unitDropdownRow, unitDropdownSelIdx, posItems, showCheckout, payCash, payUpi, payCard, payCredit, mode, grandTotal, showLastBills, customerName, customerPhone, customerAddress, searchRowIdx]);
 
     const removeRow = (idx) => {
         setRows(prev => {
@@ -1185,11 +1464,6 @@ export default function PosModule() {
         `}</style>
 
 
-        {/* Shared unit suggestions for cart Unit cell */}
-        <datalist id="unit-options">
-            {COMMON_UNITS.map(u => <option key={u} value={u}/>)}
-        </datalist>
-
         {/* ── Title bar ── modern dark gradient with branding */}
         <div className="h-9 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 justify-between shrink-0 shadow-sm border-b border-slate-700">
             <div className="flex items-center gap-3">
@@ -1251,8 +1525,37 @@ export default function PosModule() {
                     <option value="CARD">Card</option>
                     <option value="UPI">UPI</option>
                 </select>
+                {/* Order channel, not payment mode — the selector to the left
+                    already answers how the money arrived. */}
+                <label className={`${lbl} ml-3`}>From</label>
+                <select value={orderSource} onChange={e => setOrderSource(e.target.value)}
+                    className={`${inp} w-28 font-bold`}
+                    title="Where this order came from — printed on the bill">
+                    <option value="COUNTER">Counter</option>
+                    <option value="PHONE">Phone</option>
+                    <option value="WHATSAPP">WhatsApp</option>
+                    <option value="WEBSITE">Website</option>
+                    <option value="SWIGGY">Swiggy</option>
+                    <option value="ZOMATO">Zomato</option>
+                    <option value="OTHER">Other</option>
+                </select>
+                {/* Which price list this bill runs on. Switching it re-prices every
+                    line that is already on the bill, so the operator never has to
+                    re-enter anything. */}
+                {priceListsOn && (<>
+                    <label className={`${lbl} ml-3`}>Price</label>
+                    <select value={priceTier}
+                        onChange={e=>{ const v = e.target.value; setPriceTier(v); repriceAllRows(v); }}
+                        className={`${inp} w-24 font-bold`}
+                        title="Retail or wholesale price list for this bill">
+                        <option value="SALE">Retail</option>
+                        <option value="WHOLESALE">Wholesale</option>
+                    </select>
+                </>)}
                 <label className={`${lbl} ml-3 text-slate-900`}>Bill No</label>
-                <input type="text" value={billNo} onChange={e=>setBillNo(e.target.value)} className={`${inp} w-16 text-right font-bold`}/>
+                <input type="text" readOnly value={billNo} placeholder="Auto"
+                    title="Issued by the server when the bill is saved"
+                    className={`${inp} w-24 text-right font-bold cursor-default`}/>
                 <label className={`${lbl} ml-3`}>Date</label>
                 <input type="text" value={date} onChange={e=>setDate(e.target.value)} className={`${inp} w-24 text-center font-bold`}/>
                 <label className={`${lbl} ml-4 text-slate-900`}>Customer <span className="text-[9px] text-blue-700 font-black">(Alt+C)</span>{mode === 'CREDIT' && <span className="text-red-600 font-black ml-1">*</span>}</label>
@@ -1321,6 +1624,42 @@ export default function PosModule() {
                 </div>
             </div>
 
+            {/* What this customer already owes, while the bill is being rung
+                rather than after the server refuses to save it. Only ever a
+                warning here — the limit itself is enforced on the server, so a
+                failed lookup or an old browser tab cannot get past it. */}
+            {credit && (credit.blocked || credit.creditLimit > 0) && (
+                <div className={`flex items-center gap-3 px-3 py-1.5 text-[11px] font-bold border-b ${
+                    credit.blocked || credit.available <= 0
+                        ? 'bg-red-50 border-red-200 text-red-800'
+                        : credit.available < grandTotal
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
+                            : 'bg-emerald-50/60 border-emerald-200 text-emerald-800'
+                }`}>
+                    {credit.blocked ? (
+                        <span>
+                            Credit BLOCKED for {credit.partyName}
+                            {credit.blockReason ? ` — ${credit.blockReason}` : ''}. Take payment for this bill.
+                        </span>
+                    ) : (
+                        <>
+                            <span>{credit.partyName}</span>
+                            <span className="opacity-70">owes</span>
+                            <span>₹{credit.outstanding.toFixed(2)}</span>
+                            <span className="opacity-70">of</span>
+                            <span>₹{credit.creditLimit.toFixed(2)}</span>
+                            <span className="opacity-70">·</span>
+                            <span>₹{credit.available.toFixed(2)} left</span>
+                            {credit.available < grandTotal && grandTotal > 0 && (
+                                <span className="ml-1">
+                                    — this bill of ₹{grandTotal.toFixed(2)} goes ₹{(grandTotal - credit.available).toFixed(2)} over.
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
             {/* Row B2: GST compliance — Customer GSTIN | Place of Supply | Reverse Charge */}
             <div className="flex items-center px-3 py-1.5 gap-2 border-b border-slate-200/60 bg-emerald-50/30">
                 <label className={`${lbl} w-16`}>Cust GSTIN</label>
@@ -1353,6 +1692,10 @@ export default function PosModule() {
                         <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Code</th>
                         <th className="border-r border-slate-600 py-1.5 font-bold uppercase tracking-wider text-[9px] text-left pl-3">Item Name</th>
                         <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Unit</th>
+                        {batchOn && (
+                            <th className="border-r border-slate-600 w-24 py-1.5 font-bold uppercase tracking-wider text-[9px]"
+                                title="Leave blank to issue the batch closest to expiring">Batch</th>
+                        )}
                         <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Qty</th>
                         <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">Rate</th>
                         <th className="border-r border-slate-600 w-20 py-1.5 font-bold uppercase tracking-wider text-[9px]">MRP</th>
@@ -1429,50 +1772,139 @@ export default function PosModule() {
                                 )}
                             </td>
                             <td className="p-0 border-r border-[#e0e0e0] relative">
-                                <input type="text" list="unit-options" value={r.unit || ''}
+                                {/* Read-only: a unit is chosen from the list the server
+                                    allows for this item, never typed. Typing used to be
+                                    possible and produced values like "500 g" that no
+                                    conversion could resolve. */}
+                                <input type="text" readOnly value={r.unit || ''}
                                     data-row={i} data-cell="unit"
-                                    onChange={e=>{ updateRow(i,'unit',e.target.value); setUnitDropdownRow(-1); }}
-                                    onFocus={()=>{ const vs = getRowVariants(r); if (vs.length > 0) { setUnitDropdownRow(i); setUnitDropdownSelIdx(0); } }}
+                                    onFocus={()=>{ if (getRowUnits(r).length > 0 || getRowVariants(r).length > 0) { setUnitDropdownRow(i); setUnitDropdownSelIdx(0); } }}
                                     onBlur={()=>setTimeout(()=>setUnitDropdownRow(p => p === i ? -1 : p), 150)}
-                                    className="w-full h-[16px] px-2 text-[11px] font-bold outline-none focus:bg-yellow-50"/>
+                                    className="w-full h-[16px] px-2 text-[11px] font-bold outline-none focus:bg-yellow-50 cursor-pointer"/>
                                 {unitDropdownRow === i && (() => {
+                                    const allowed = getRowUnits(r);
                                     const variants = getRowVariants(r);
-                                    if (variants.length === 0) return null;
+                                    // Allowed units are the real thing. Size variants stay
+                                    // as a fallback for items that were set up with sizes
+                                    // and no units, so those bills keep working.
+                                    if (allowed.length === 0 && variants.length === 0) return null;
+                                    const useUnits = allowed.length > 0;
+                                    const baseCode = (allowed.find(a => a.isBase) || {}).unitCode || '';
                                     return (
-                                        <div className="absolute z-50 left-0 top-[22px] bg-white border border-[#1a5276] shadow-2xl w-56 max-h-60 overflow-auto">
-                                            <div className="bg-[#1a5276] text-white text-[10px] font-black uppercase tracking-widest px-2 py-1">Pick Size</div>
-                                            {variants.map((v, idx) => (
-                                                <div key={idx}
-                                                    onMouseDown={(e)=>{ e.preventDefault(); applyVariantToRow(i, v); }}
-                                                    className={`flex items-center justify-between px-2 py-1.5 cursor-pointer border-b border-slate-100 ${unitDropdownSelIdx === idx ? 'bg-yellow-200' : 'hover:bg-blue-50'}`}>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-5 h-5 rounded bg-[#1a5276] text-white flex items-center justify-center font-black text-[10px]">{idx+1}</span>
-                                                        <span className="font-black text-slate-900 text-[12px]">{v.size}</span>
+                                        <div className="absolute z-50 left-0 top-[22px] bg-white border border-[#1a5276] shadow-2xl w-64 max-h-60 overflow-auto">
+                                            <div className="bg-[#1a5276] text-white text-[10px] font-black uppercase tracking-widest px-2 py-1">
+                                                {useUnits ? 'Pick Unit' : 'Pick Size'}
+                                            </div>
+                                            {useUnits
+                                                ? allowed.map((a, idx) => (
+                                                    <div key={a.unitCode}
+                                                        onMouseDown={(e)=>{ e.preventDefault(); applyUnitToRow(i, a); }}
+                                                        className={`flex items-center justify-between px-2 py-1.5 cursor-pointer border-b border-slate-100 ${unitDropdownSelIdx === idx ? 'bg-yellow-200' : 'hover:bg-blue-50'}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-5 h-5 rounded bg-[#1a5276] text-white flex items-center justify-center font-black text-[10px]">{idx+1}</span>
+                                                            <span className="font-black text-slate-900 text-[12px]">{a.unitCode}</span>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-500 font-semibold">
+                                                            {a.isBase ? 'base' : `1 ${a.unitCode} = ${a.conversionRate} ${baseCode}`}
+                                                        </span>
                                                     </div>
-                                                    <span className="font-black text-emerald-700 text-[13px]">₹{parseFloat(v.rate).toFixed(2)}</span>
-                                                </div>
-                                            ))}
+                                                ))
+                                                : variants.map((v, idx) => (
+                                                    <div key={idx}
+                                                        onMouseDown={(e)=>{ e.preventDefault(); applyVariantToRow(i, v); }}
+                                                        className={`flex items-center justify-between px-2 py-1.5 cursor-pointer border-b border-slate-100 ${unitDropdownSelIdx === idx ? 'bg-yellow-200' : 'hover:bg-blue-50'}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-5 h-5 rounded bg-[#1a5276] text-white flex items-center justify-center font-black text-[10px]">{idx+1}</span>
+                                                            <span className="font-black text-slate-900 text-[12px]">{v.size}</span>
+                                                        </div>
+                                                        <span className="font-black text-emerald-700 text-[13px]">₹{parseFloat(v.rate).toFixed(2)}</span>
+                                                    </div>
+                                                ))}
                                         </div>
                                     );
                                 })()}
                             </td>
+                            {batchOn && (
+                                <td className="p-0 border-r border-[#e0e0e0] relative">
+                                    {/* Blank is the normal case and means the batch closest
+                                        to expiring. A batch is named only when the pack in
+                                        the customer's hand has to be matched. */}
+                                    <input type="text" readOnly value={r.batchNo || ''}
+                                        data-row={i} data-cell="batchNo"
+                                        placeholder="FEFO"
+                                        title="Leave blank to issue the batch closest to expiring"
+                                        onFocus={()=>{ loadRowBatches(r.code); setBatchDropdownRow(i); }}
+                                        onBlur={()=>setTimeout(()=>setBatchDropdownRow(p => p === i ? -1 : p), 150)}
+                                        className="w-full h-[22px] px-2 text-[11px] font-bold outline-none focus:bg-yellow-50 cursor-pointer placeholder:text-slate-300 placeholder:font-normal"/>
+                                    {batchDropdownRow === i && (() => {
+                                        const list = rowBatches[String(r.code || '')] || [];
+                                        if (list.length === 0) return null;
+                                        const todayIso = new Date().toISOString().slice(0, 10);
+                                        return (
+                                            <div className="absolute z-50 left-0 top-[22px] bg-white border border-[#1a5276] shadow-2xl w-72 max-h-60 overflow-auto">
+                                                <div className="bg-[#1a5276] text-white text-[10px] font-black uppercase tracking-widest px-2 py-1">
+                                                    Pick Batch
+                                                </div>
+                                                <div onMouseDown={(e)=>{ e.preventDefault(); updateRow(i,'batchNo',''); setBatchDropdownRow(-1); }}
+                                                    className="flex items-center justify-between px-2 py-1.5 cursor-pointer border-b border-slate-100 hover:bg-blue-50">
+                                                    <span className="font-black text-slate-900 text-[12px]">Nearest expiry</span>
+                                                    <span className="text-[10px] text-slate-500 font-semibold">automatic</span>
+                                                </div>
+                                                {list.map(b => (
+                                                    <div key={b.id}
+                                                        onMouseDown={(e)=>{ e.preventDefault(); updateRow(i,'batchNo',b.batchNo); setBatchDropdownRow(-1); }}
+                                                        className="flex items-center justify-between px-2 py-1.5 cursor-pointer border-b border-slate-100 hover:bg-blue-50">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-black text-slate-900 text-[12px]">{b.batchNo}</span>
+                                                            <span className={`text-[10px] font-semibold ${b.expiryDate && b.expiryDate < todayIso ? 'text-red-600' : 'text-slate-500'}`}>
+                                                                {b.expiryDate ? `exp ${b.expiryDate}` : 'no expiry recorded'}
+                                                            </span>
+                                                        </div>
+                                                        <span className="font-black text-emerald-700 text-[12px]">{b.currentQty}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+                                </td>
+                            )}
                             <td className="p-0 border-r border-[#e0e0e0]">
-                                <input data-row={i} data-cell="qty" type="number" value={r.qty || ''}
+                                <input data-row={i} data-cell="qty" type="number"
+                                    step={decimalsForRowUnit(r) === 0 ? '1' : String(1 / Math.pow(10, decimalsForRowUnit(r)))}
+                                    value={r.qty || ''}
+                                    title={decimalsForRowUnit(r) === 0 ? 'This unit is counted in whole numbers' : undefined}
                                     onChange={e=>updateRow(i,'qty',e.target.value)}
+                                    onBlur={e=>{
+                                        // Round to what the unit is actually counted in, so a
+                                        // pasted 1.3333 does not become a quantity nobody can
+                                        // pick off a shelf.
+                                        const d = decimalsForRowUnit(r);
+                                        const n = parseFloat(e.target.value);
+                                        if (Number.isFinite(n)) {
+                                            const p = Math.pow(10, d);
+                                            const rounded = Math.round(n * p) / p;
+                                            if (rounded !== n) updateRow(i, 'qty', String(rounded));
+                                        }
+                                    }}
                                     onFocus={()=>{ if (r.itemName) selectRowForStock(r); }}
                                     className="no-spin w-full h-[22px] pr-2 text-[11px] font-bold outline-none focus:bg-yellow-50 text-right"/>
                             </td>
                             <td className="p-0 border-r border-[#e0e0e0]">
+                                {/* Read-only when rate editing is switched off. The
+                                    server refuses a changed rate as well, so this is
+                                    the visible half of the rule, not the whole of it. */}
                                 <input data-row={i} data-cell="rate" type="number" value={r.rate || ''}
-                                    onChange={e=>updateRow(i,'rate',e.target.value)}
+                                    readOnly={!allowRateEdit}
+                                    title={allowRateEdit ? undefined : 'Rate comes from the price list. Editing is switched off in POS settings.'}
+                                    onChange={e=>{ if (allowRateEdit) updateRow(i,'rate',e.target.value); }}
                                     onFocus={()=>{ if (r.itemName) selectRowForStock(r); }}
-                                    className="no-spin w-full h-[22px] pr-2 text-[11px] font-bold outline-none focus:bg-yellow-50 text-right"/>
+                                    className={`no-spin w-full h-[22px] pr-2 text-[11px] font-bold outline-none text-right ${allowRateEdit ? 'focus:bg-yellow-50' : 'cursor-default bg-slate-50 text-slate-600'}`}/>
                             </td>
                             <td className="border-r border-[#e0e0e0] pr-2 text-right font-bold">{r.mrpRate ? parseFloat(r.mrpRate).toFixed(2) : '0.00'}</td>
                             <td className="border-r border-[#e0e0e0] text-center font-black">
                                 {(() => {
                                     if (!r.itemName) return <span className="text-slate-400">—</span>;
-                                    const prod = pharmaItems.find(p => p.code === r.code || p.itemName === r.itemName);
+                                    const prod = posItems.find(p => p.code === r.code || p.itemName === r.itemName);
                                     if (!prod) return <span className="text-slate-400">—</span>;
                                     const stk = prod.minStkQty != null ? prod.minStkQty : prod.minStock;
                                     if (stk == null) return <span className="text-slate-400">—</span>;
@@ -1572,6 +2004,44 @@ export default function PosModule() {
                             <td className="font-bold px-2 py-0">GST / Tax</td>
                             <td className="text-right px-2 py-0 border-l border-[#ccc] font-bold">₹{taxAmount.toFixed(2)}</td>
                         </tr>
+                        {/* The shop's own charges, each with the name the shop
+                            gave it. An automatic charge shows its figure; one
+                            the operator sets gets a box. A shop with no charges
+                            renders none of this and the panel is unchanged. */}
+                        {chargeDefs.map(c => {
+                            const line = chargePreview.lines.find(l => l.code === c.code);
+                            const typeable = c.mode === 'MANUAL' || c.editable;
+                            return (
+                                <tr key={c.code} className="border-b border-[#ccc]">
+                                    <td className="font-bold px-2 py-0 truncate" title={c.name}>
+                                        {c.name}
+                                        {c.calcType === 'PERCENT' && (
+                                            <span className="ml-1 font-normal text-slate-500">{c.value}%</span>
+                                        )}
+                                    </td>
+                                    {typeable ? (
+                                        <td className="p-0 border-l border-[#ccc]">
+                                            <input type="number" value={chargeTyped[c.code] ?? ''}
+                                                placeholder={line ? line.amount.toFixed(2) : '0.00'}
+                                                onChange={e => setChargeTyped(p => ({ ...p, [c.code]: e.target.value }))}
+                                                className="no-spin w-full h-[16px] px-2 text-right font-bold outline-none focus:bg-yellow-50"/>
+                                        </td>
+                                    ) : (
+                                        <td className="text-right px-2 py-0 border-l border-[#ccc] font-bold">
+                                            ₹{(line?.amount ?? 0).toFixed(2)}
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
+                        {chargePreview.chargesTax > 0 && (
+                            <tr className="border-b border-[#ccc]">
+                                <td className="font-bold px-2 py-0">GST on charges</td>
+                                <td className="text-right px-2 py-0 border-l border-[#ccc] font-bold">
+                                    ₹{chargePreview.chargesTax.toFixed(2)}
+                                </td>
+                            </tr>
+                        )}
                         <tr>
                             <td className="font-bold px-2 py-0">Remarks</td>
                             <td className="p-0 border-l border-[#ccc]"><input type="text" value={remarks} onChange={e=>setRemarks(e.target.value)} className="w-full h-[16px] px-2 text-[10px] font-bold outline-none focus:bg-yellow-50"/></td>
@@ -1652,6 +2122,14 @@ export default function PosModule() {
                 </table>
             </div>
         </div>
+
+        {/* What the last scan resolved to, or why it did not. Sits above the
+            save toast so a scale weight is visible while the cashier keeps
+            scanning. */}
+        {scanNote && (<div className="absolute bottom-16 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-xl text-xs font-bold z-50 border"
+            style={{ background: 'var(--pos-surface)', color: 'var(--pos-ink)', borderColor: 'var(--pos-line)' }}>
+            {scanNote}
+        </div>)}
 
         {showToast && (<div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-2xl font-bold text-sm z-50 flex items-center gap-4 border-2 border-emerald-400">
             <div className="flex items-center gap-2">

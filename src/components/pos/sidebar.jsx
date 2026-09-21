@@ -16,9 +16,10 @@ import React, { useMemo } from 'react';
 import {
     LayoutDashboard, ShoppingBag, Undo2, FileText as Quote, ShoppingCart, Package,
     Boxes, Sliders, ArrowLeftRight, Users, Truck, BookOpen, Wallet, Receipt,
-    BarChart3, Settings, Hash, ScanLine, Grid, Percent, LogOut, PanelLeftClose, PanelLeft,
+    BarChart3, Settings, Hash, ScanLine, Grid, Percent, LogOut, PanelLeftClose, PanelLeft, Ruler, ListOrdered, Landmark, Printer, Building2, PackageOpen, CalendarClock, CreditCard, UtensilsCrossed, ReceiptText,
 } from 'lucide-react';
 import { canOpenScreen, roleLabel } from './permissions';
+import { useBusinessConfig, SCREEN_MODULE } from './business-config';
 import { Brand, Mark } from './brand';
 
 /**
@@ -47,27 +48,41 @@ export const NAV_GROUPS = [
         ],
     },
     {
+        group: 'Restaurant',
+        items: [
+            { id: 'restaurant', label: 'Tables & Orders', icon: UtensilsCrossed },
+        ],
+    },
+    {
         group: 'Inventory',
         items: [
             { id: 'itemmaster',       label: 'Items',            icon: Package },
             { id: 'category',         label: 'Categories',       icon: Grid },
             { id: 'inventory',        label: 'Stock',            icon: Boxes },
             { id: 'stock-adjustment', label: 'Stock Adjustment', icon: Sliders },
+            { id: 'repack',           label: 'Repacking',        icon: PackageOpen },
+            { id: 'batches',          label: 'Batches & Expiry', icon: CalendarClock },
             { id: 'stock-transfer',   label: 'Stock Transfer',   icon: ArrowLeftRight, planned: 'Needs a server backend' },
             { id: 'barcode',          label: 'Barcode',          icon: ScanLine },
             { id: 'tax-master',       label: 'Tax Master',       icon: Percent },
+            { id: 'charges',          label: 'Charges',          icon: ReceiptText },
+            { id: 'unit-settings',    label: 'Units & Scale',    icon: Ruler },
+            { id: 'numbering-settings', label: 'Numbering',      icon: ListOrdered },
+            { id: 'print-templates',  label: 'Print Design',   icon: Printer },
         ],
     },
     {
         group: 'Contacts',
         items: [
             { id: 'customers', label: 'Customers', icon: Users },
+            { id: 'credit-limits', label: 'Credit Limits', icon: CreditCard },
             { id: 'suppliers', label: 'Suppliers', icon: Truck, planned: 'Suppliers live inside Ledger today' },
         ],
     },
     {
         group: 'Accounts',
         items: [
+            { id: 'accounts', label: 'Books',   icon: Landmark },
             { id: 'ledger',  label: 'Ledger',   icon: BookOpen },
             { id: 'receipt', label: 'Receipts', icon: Receipt },
             { id: 'payment', label: 'Payments', icon: Wallet },
@@ -81,6 +96,7 @@ export const NAV_GROUPS = [
         group: null,
         items: [
             { id: 'users',    label: 'Users & Roles', icon: Users },
+            { id: 'business-setup', label: 'Business Setup', icon: Building2 },
             { id: 'settings', label: 'Settings',      icon: Settings },
         ],
     },
@@ -90,9 +106,22 @@ export default function Sidebar({
     activeTab, onNavigate, permissions, session,
     financialYear, collapsed, onToggleCollapse, onLogout, onOpenProfile,
 }) {
+    const { isModuleOn } = useBusinessConfig();
+
+    // Two filters, and they answer different questions. Permission asks whether
+    // THIS USER may open the screen; the module asks whether THIS BUSINESS uses
+    // it at all. A pharmacy hides the table plan from everyone, including the
+    // owner, because it is not a restaurant.
     const groups = useMemo(() => NAV_GROUPS
-        .map(g => ({ ...g, items: g.items.filter(i => i.planned || canOpenScreen(permissions, i.id)) }))
-        .filter(g => g.items.length > 0), [permissions]);
+        .map(g => ({
+            ...g,
+            items: g.items.filter(i => {
+                if (!(i.planned || canOpenScreen(permissions, i.id))) return false;
+                const mod = SCREEN_MODULE[i.id];
+                return !mod || isModuleOn(mod);
+            }),
+        }))
+        .filter(g => g.items.length > 0), [permissions, isModuleOn]);
 
     const initials = (session?.displayName || session?.username || 'A')
         .split(/[\s@.]+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase();

@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { usePageFocus } from '../pos';
 import { FileText, Download, Printer, Loader2, AlertTriangle, Calendar, Search, Eye } from 'lucide-react';
 import { getReport, formatCell } from '../../core/reports/report-registry';
 import { PosActiveCompanyQuery } from '../../core/queries/company.query';
@@ -24,6 +25,10 @@ function defaultRange() {
  * the summary band always reflects backend period totals).
  */
 export default function StandardReportScreen({ reportId }) {
+    // A report is driven from its dates. Keyed on the report id so switching
+    // report puts the cursor back at the top.
+    const dateRef = usePageFocus(reportId);
+
     const descriptor = getReport(reportId);
     const [{ from, to }, setRange] = useState(defaultRange);
     const [loading, setLoading] = useState(false);
@@ -102,7 +107,7 @@ export default function StandardReportScreen({ reportId }) {
             <div className="px-5 py-3 bg-white border-b border-slate-200 shrink-0 flex items-center gap-3 flex-wrap">
                 {descriptor.needsDateRange && (<>
                     <Calendar size={16} className="text-slate-500" />
-                    <input type="date" value={from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className="px-2 py-1.5 border border-slate-300 rounded-md text-sm font-bold outline-none" title="From" />
+                    <input ref={dateRef} type="date" value={from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className="px-2 py-1.5 border border-slate-300 rounded-md text-sm font-bold outline-none" title="From" />
                     <span className="text-slate-500 font-bold">to</span>
                     <input type="date" value={to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className="px-2 py-1.5 border border-slate-300 rounded-md text-sm font-bold outline-none" title="To" />
                     <button onClick={load} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-sm font-bold">Apply</button>

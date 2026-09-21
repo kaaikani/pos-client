@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { ScanLine, Printer, Search, RefreshCw, CheckCircle, FileText, Download, AlertTriangle, Plus, Trash2, Eye, EyeOff, Save, Wand2, Loader2, AlignLeft, AlignCenter, AlignRight, LayoutGrid, Columns3, X, Crosshair, RotateCcw, QrCode } from 'lucide-react';
-import { ListItemsQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery } from '../../core/queries/pos.query';
 import { PosActiveCompanyQuery } from '../../core/queries/company.query';
 import { GenerateItemBarcodeCommand, GenerateMissingBarcodesCommand, AddItemBarcodeCommand } from '../../core/queries/barcode.query';
 import { FIELD_MAP, resolveFieldText, isBarcodeField, isQrField, resolveQrText, QR_SOURCES, masterRaw } from '../../core/barcode/label-fields';
@@ -39,6 +40,8 @@ const DEFAULT_COLS = ['code', 'barcode', 'salesRate', 'mrpRate'];
 
 export default function BarcodeModule() {
     const [activeTab, setActiveTab] = useState('assign');
+    // The item search, but only on the tab that has one.
+    const searchRef = usePageFocus(activeTab);
     const [items, setItems] = useState([]);
     const [company, setCompany] = useState(null);
     const [search, setSearch] = useState('');
@@ -143,7 +146,21 @@ export default function BarcodeModule() {
     const patchInner = (side, v) => setTemplate((t) => ({ ...t, layout: { ...t.layout, inner: { ...t.layout.inner, [side]: v } } }));
     const patchField = useCallback((idx, patch) => setTemplate((t) => ({ ...t, fields: t.fields.map((f, i) => (i === idx ? { ...f, ...patch, font: { ...f.font, ...(patch.font || {}) } } : f)) })), []);
     const applyPreset = (key) => { const p = SIZE_PRESETS[key]; setTemplate((t) => ({ ...t, size: { preset: key, widthMm: p.widthMm, heightMm: p.heightMm } })); };
-    const applyPrinter = (key) => { const p = PRINTER_PRESETS[key]; setTemplate((t) => ({ ...t, printer: key, size: { ...t.size, preset: 'custom', widthMm: p.widthMm } })); };
+    /*
+     * Choosing a thermal printer also chooses roll output. Setting only the
+     * width left the template positioning for an A4 sheet, so every sticker
+     * came out offset by the sheet's margin.
+     */
+    const applyPrinter = (key) => {
+        const p = PRINTER_PRESETS[key];
+        setTemplate((t) => ({
+            ...t,
+            printer: key,
+            output: p.roll ? 'ROLL' : t.output,
+            size: { ...t.size, preset: 'custom', widthMm: p.widthMm },
+        }));
+    };
+    const setOutput = (output) => setTemplate((t) => ({ ...t, output }));
     const autoArrange = () => setTemplate((t) => ({ ...t, fields: autoLayoutFields(t.fields, t.size, t.barcode, t.layout.inner) }));
     const addCustomField = () => { if (!newField.label.trim()) return; setTemplate((t) => { const cid = 'c' + Date.now().toString(36); const r = safeRect(t); return { ...t, fields: [...t.fields, { custom: true, cid, label: newField.label.trim(), value: newField.value, visible: true, x: r.x, y: r.y, w: r.w, h: 4, font: { ...t.font, align: 'center' } }] }; }); setNewField({ label: '', value: '' }); };
     const addQrField = () => setTemplate((t) => {
@@ -159,7 +176,10 @@ export default function BarcodeModule() {
 
     const sampleItem = queue[0]?.item || filtered[0] || items[0] || {};
     const sampleCtx = { item: sampleItem, company, overrides: overridesById[sampleItem.id] || {} };
-    const perPage = Math.max(1, (template.layout.perRow || 1) * (template.layout.perColumn || 1));
+    const isRoll = template.output !== 'SHEET';
+    const perPage = isRoll
+        ? 1
+        : Math.max(1, (template.layout.perRow || 1) * (template.layout.perColumn || 1));
     const sheetLabels = useMemo(() => { const real = expandLabels(queue, company); const src = real.length ? real : [sampleCtx]; return Array.from({ length: perPage }, (_, i) => src[i % src.length]); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [queue, company, perPage, sampleCtx.item, template.fields, overridesById]);
     const selField = selectedIdx >= 0 ? template.fields[selectedIdx] : null;
 
@@ -190,7 +210,7 @@ export default function BarcodeModule() {
                     <div className="p-4 bg-white border-b border-slate-200 flex gap-3 items-center shrink-0">
                         <div className="relative flex-1 max-w-md">
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items by name / code / barcode…" className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white outline-none" />
+                            <input value={search} onChange={(e) => setSearch(e.target.value)} ref={searchRef} placeholder="Search items by name / code / barcode…" className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white outline-none" />
                         </div>
                         <button onClick={handleGenerateMissing} disabled={busyId === 'all'} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">{busyId === 'all' ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />} Auto-Generate Missing</button>
                         <div className="relative ml-auto">
@@ -303,6 +323,22 @@ export default function BarcodeModule() {
                             <p className="text-[10px] text-slate-400 mt-1">Lists printers installed on this PC. The chosen one is saved as default and used by Print Now.</p>
                         </Section>
 
+                        <Section title="How the stickers come out">
+                            <div className="flex flex-wrap gap-1.5">
+                                <button onClick={() => setOutput('ROLL')}
+                                    className={`px-2 py-1 rounded text-xs font-bold border ${isRoll ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>
+                                    Roll <span className="opacity-60">one sticker per page</span>
+                                </button>
+                                <button onClick={() => setOutput('SHEET')}
+                                    className={`px-2 py-1 rounded text-xs font-bold border ${!isRoll ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>
+                                    Sheet <span className="opacity-60">grid on A4</span>
+                                </button>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1.5">
+                                Thermal label printers are rolls — the page is the sticker and there is no margin.
+                                Choose Sheet only for A4 sticker paper in an ordinary printer.
+                            </p>
+                        </Section>
                         <Section title="Sticker width preset (size only — not a device)"><div className="flex flex-wrap gap-1.5">{Object.entries(PRINTER_PRESETS).map(([k, p]) => <button key={k} onClick={() => applyPrinter(k)} className={`px-2 py-1 rounded text-xs font-bold border ${template.printer === k ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>{p.label} <span className="opacity-60">{p.widthMm}mm</span></button>)}</div></Section>
 
                         <Section title="Sticker Size">
@@ -466,9 +502,18 @@ function StickerCanvas({ template, ctx, selectedIdx, onSelect, onChangeField }) 
 const PXMM = 3.78;
 function SheetPreview({ template, labels }) {
     const W = template.size.widthMm * PXMM, H = template.size.heightMm * PXMM;
-    const perRow = Math.max(1, template.layout.perRow || 1), perCol = Math.max(1, template.layout.perColumn || 1);
-    const gx = (template.layout.gapXmm || 0) * PXMM, gy = (template.layout.gapYmm || 0) * PXMM;
-    const o = template.layout.outer, i = template.layout.inner;
+    /*
+     * The preview has to show what comes out, and on a roll what comes out is
+     * one sticker with nothing around it. Showing a 2 x 5 sheet here while the
+     * printer feeds a roll is how the wrong position went unnoticed.
+     */
+    const roll = template.output !== "SHEET";
+    const perRow = roll ? 1 : Math.max(1, template.layout.perRow || 1);
+    const perCol = roll ? 1 : Math.max(1, template.layout.perColumn || 1);
+    const gx = roll ? 0 : (template.layout.gapXmm || 0) * PXMM;
+    const gy = roll ? 0 : (template.layout.gapYmm || 0) * PXMM;
+    const o = roll ? { top: 0, left: 0, right: 0, bottom: 0 } : template.layout.outer;
+    const i = template.layout.inner;
     const pageW = (o.left + o.right) * PXMM + perRow * W + (perRow - 1) * gx, pageH = (o.top + o.bottom) * PXMM + perCol * H + (perCol - 1) * gy;
     const scale = Math.min(1, 520 / pageW, 560 / pageH);
     const cells = Array.from({ length: perRow * perCol }, (_, k) => labels[k] || null);

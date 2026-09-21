@@ -61,10 +61,13 @@ export function HeaderStat({ label, value, tone = 'default' }) {
         warn: 'text-[var(--pos-warn)]',
         danger: 'text-[var(--pos-danger)]',
     };
+    // Mono at 15px was the same weight as the label beside it, so nothing in
+    // the header read as the answer. The number is the answer: it gets the
+    // size, and the label shrinks to a caption.
     return (
         <div className="text-right">
-            <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-[var(--pos-ink-3)] leading-none">{label}</div>
-            <div className={cx('text-[15px] font-bold leading-tight mt-1 tabular-nums', tones[tone])} style={{ fontFamily: 'var(--pos-mono)' }}>{value}</div>
+            <div className="text-[9.5px] font-bold uppercase tracking-[.09em] text-[var(--pos-ink-3)] leading-none">{label}</div>
+            <div className={cx('pos-figure text-[19px] leading-none mt-1.5', tones[tone])}>{value}</div>
         </div>
     );
 }
@@ -97,14 +100,20 @@ export function ActionBar({ children, left }) {
    CARD
    ══════════════════════════════════════════════════════════ */
 
-export function Card({ title, subtitle, actions, children, className, bodyClassName, flush }) {
+/*
+ * Takes a ref so a form flow can own the whole card — see useFormFlow. The
+ * ref lands on the <section>, which is the element the keydown listener needs.
+ */
+export const Card = React.forwardRef(function Card(
+    { title, subtitle, actions, children, className, bodyClassName, flush }, ref,
+) {
     return (
-        <section className={cx('bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] overflow-hidden', className)}>
+        <section ref={ref} className={cx('bg-[var(--pos-surface)] border border-[var(--pos-line)] rounded-[var(--pos-r-lg)] shadow-[var(--pos-shadow)] overflow-hidden', className)}>
             {(title || actions) && (
-                <div className="flex items-center gap-3 px-4 h-[42px] border-b border-[var(--pos-line)] bg-[var(--pos-sunk)]">
+                <div className="flex items-center gap-3 px-4 min-h-[44px] py-2 border-b border-[var(--pos-line-soft)]">
                     <div className="min-w-0 flex-1">
-                        <h2 className="text-[12px] font-bold uppercase tracking-[.05em] text-[var(--pos-ink-2)] truncate">{title}</h2>
-                        {subtitle && <p className="text-[11px] text-[var(--pos-ink-3)] truncate">{subtitle}</p>}
+                        <h2 className="text-[13px] font-semibold text-[var(--pos-ink)] truncate">{title}</h2>
+                        {subtitle && <p className="text-[11.5px] text-[var(--pos-ink-3)] truncate mt-0.5">{subtitle}</p>}
                     </div>
                     {actions && <div className="flex items-center gap-1.5 shrink-0">{actions}</div>}
                 </div>
@@ -112,7 +121,7 @@ export function Card({ title, subtitle, actions, children, className, bodyClassN
             <div className={cx(!flush && 'p-4', bodyClassName)}>{children}</div>
         </section>
     );
-}
+});
 
 /* ══════════════════════════════════════════════════════════
    FORM
@@ -212,13 +221,13 @@ export function Badge({ tone = 'neutral', children }) {
     const tones = {
         neutral: 'bg-[var(--pos-sunk)] text-[var(--pos-ink-2)] border-[var(--pos-line)]',
         accent:  'bg-[var(--pos-select)] text-[var(--pos-ink)] border-[var(--pos-select-line)]',
-        ok:      'bg-[var(--pos-ok-soft)] text-[var(--pos-ok)] border-transparent',
-        warn:    'bg-[var(--pos-warn-soft)] text-[var(--pos-warn)] border-transparent',
-        danger:  'bg-[var(--pos-danger-soft)] text-[var(--pos-danger)] border-transparent',
-        info:    'bg-[var(--pos-info-soft)] text-[var(--pos-info)] border-transparent',
+        ok:      'bg-[var(--pos-ok-soft)] text-[var(--pos-ok)] border-[var(--pos-ok-line)]',
+        warn:    'bg-[var(--pos-warn-soft)] text-[var(--pos-warn)] border-[var(--pos-warn-line)]',
+        danger:  'bg-[var(--pos-danger-soft)] text-[var(--pos-danger)] border-[var(--pos-danger-line)]',
+        info:    'bg-[var(--pos-info-soft)] text-[var(--pos-info)] border-[var(--pos-info-line)]',
     };
     return (
-        <span className={cx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-bold uppercase tracking-[.05em] border', tones[tone])}>
+        <span className={cx('inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[10.5px] font-bold tracking-[.01em] border', tones[tone])}>
             {children}
         </span>
     );
@@ -401,11 +410,18 @@ export function useConfirm() {
    ══════════════════════════════════════════════════════════
      const flow = useFieldFlow(['name', 'phone', 'amount'], onLast);
      <Input {...flow.field('name')} />
+
+   The hook has existed for a while and does the right thing. It was used on
+   two screens out of twenty-nine, and on one of those the operator still had
+   to click into the first box before typing. Both of those are fixed below:
+   the flow now lands focus by itself, and the rest of the application can
+   adopt it a screen at a time without any of them re-inventing the keys.
    ══════════════════════════════════════════════════════════ */
 
-export function useFieldFlow(order, onComplete) {
+export function useFieldFlow(order, onComplete, opts = {}) {
     const refs = useRef({});
     const seq = useMemo(() => order, [order.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+    const { autoFocus = true } = opts;
 
     const focus = useCallback((name) => {
         const el = refs.current[name];
@@ -424,6 +440,29 @@ export function useFieldFlow(order, onComplete) {
         if (dir > 0) onComplete?.();
     }, [seq, focus, onComplete]);
 
+    const first = useCallback(() => {
+        for (const name of seq) if (focus(name)) return true;
+        return false;
+    }, [seq, focus]);
+
+    /**
+     * Land on the first field by itself.
+     *
+     * A form that opens with nothing focused makes the operator reach for the
+     * mouse to type the first character — every time, on every bill. That one
+     * reach is the difference between a keyboard till and a slow one.
+     *
+     * Deferred by a frame because the inputs are not in the DOM on the render
+     * that runs this effect. `focus()` returns false for a field that is not
+     * mounted, so a form still hidden behind a list simply does nothing, and
+     * the screen's own call to `first()` takes over when it appears.
+     */
+    useEffect(() => {
+        if (!autoFocus) return;
+        const id = requestAnimationFrame(() => { first(); });
+        return () => cancelAnimationFrame(id);
+    }, [autoFocus, first]);
+
     const field = useCallback((name) => ({
         ref: (el) => { if (el) refs.current[name] = el; else delete refs.current[name]; },
         onFocus: (e) => { if (typeof e.target.select === 'function') e.target.select(); },
@@ -436,7 +475,188 @@ export function useFieldFlow(order, onComplete) {
         },
     }), [step]);
 
-    return { field, focus, first: useCallback(() => focus(seq[0]), [focus, seq]) };
+    return { field, focus, first };
+}
+
+/**
+ * Enter moves to the next field, for a whole form at once.
+ *
+ *   const form = useFormFlow(onLastField);
+ *   <Card ref={form.ref}> … any number of Inputs … </Card>
+ *
+ * `useFieldFlow` above asks the screen to name its fields in order. That is
+ * exact, and it is the right tool when the order is not the order on screen.
+ * It is also a list that has to be kept in step with the markup, and a field
+ * added to the form but forgotten in the list is silently skipped — which is
+ * worse than no flow at all, because the operator cannot see why the cursor
+ * jumped over a box.
+ *
+ * This takes the order from the DOM instead. What you see is the order you get,
+ * a new field joins the flow by existing, and a screen adopts the whole thing
+ * in two lines.
+ *
+ * Skipped deliberately: anything disabled, read-only or hidden, buttons, and
+ * checkboxes — a checkbox answers to Space, and stealing Enter from it would
+ * make ticking a box move the cursor away from it.
+ */
+export function useFormFlow(onComplete, opts = {}) {
+    const { autoFocus = true, enabled = true } = opts;
+
+    // A callback ref, not a plain one, because the form is usually not on
+    // screen when the screen first mounts — a record module renders its list
+    // first and the form only when the operator opens one. A plain ref is
+    // still null when the effects run, the listener attaches to nothing, and
+    // Enter silently does nothing forever after. Holding the node in state
+    // re-runs the effects at the moment the form actually appears, and again
+    // when it goes away.
+    const node = useRef(null);
+    const [root, setRoot] = useState(null);
+    const ref = useCallback((el) => { node.current = el; setRoot(el); }, []);
+
+    // Screens pass an inline arrow, which is a new function on every render.
+    // Kept in a ref so the listener attaches when the form appears and not
+    // again on every keystroke.
+    const done = useRef(onComplete);
+    done.current = onComplete;
+
+    const fields = useCallback(() => {
+        if (!root) return [];
+        return [...root.querySelectorAll('input, select, textarea')].filter(el => {
+            if (el.disabled || el.readOnly) return false;
+            if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'hidden') return false;
+            // offsetParent is null for anything display:none — a field inside a
+            // collapsed section is not somewhere the cursor should land.
+            return el.offsetParent !== null;
+        });
+    }, [root]);
+
+    const first = useCallback(() => {
+        const f = fields();
+        if (f.length === 0) return false;
+        f[0].focus();
+        if (typeof f[0].select === 'function') f[0].select();
+        return true;
+    }, [fields]);
+
+    useEffect(() => {
+        if (!autoFocus || !enabled) return undefined;
+        const id = requestAnimationFrame(() => { first(); });
+        return () => cancelAnimationFrame(id);
+    }, [autoFocus, enabled, first]);
+
+    useEffect(() => {
+        if (!root || !enabled) return undefined;
+
+        const onKey = (e) => {
+            if (e.key !== 'Enter') return;
+            // The listener sits on the form root, so a field's own handler has
+            // already run. If it called preventDefault, Enter meant something
+            // there — pick the highlighted option, add the row — and moving the
+            // cursor on top of that would undo what the operator just did.
+            if (e.defaultPrevented) return;
+            const el = e.target;
+            // A textarea keeps Enter for newlines; Ctrl+Enter moves on.
+            if (el.tagName === 'TEXTAREA' && !e.ctrlKey) return;
+            if (el.tagName === 'BUTTON') return;
+
+            const f = fields();
+            const i = f.indexOf(el);
+            if (i < 0) return;
+
+            e.preventDefault();               // never submit the form on Enter
+            const next = f[i + (e.shiftKey ? -1 : 1)];
+            if (next) {
+                next.focus();
+                if (typeof next.select === 'function') next.select();
+            } else if (!e.shiftKey) {
+                // Past the last field is the operator saying "that is the lot".
+                done.current?.();
+            }
+        };
+
+        root.addEventListener('keydown', onKey);
+        return () => root.removeEventListener('keydown', onKey);
+    }, [root, fields, enabled]);
+
+    return { ref, first, fields };
+}
+
+/**
+ * Puts the cursor where the work starts, on any screen.
+ *
+ * For the screens that are not a form — a list with a search box, a floor plan,
+ * a report with a date range. The operator should be able to open the screen
+ * and type.
+ *
+ *   const search = usePageFocus();
+ *   <SearchInput ref={search} … />
+ *
+ * `when` re-lands focus whenever it changes, which is how a screen returns the
+ * cursor after closing a dialog or switching tabs.
+ */
+export function usePageFocus(when, opts = {}) {
+    // `ref` lets a component that already owns the element hand it in, so the
+    // landing focus is decided in one place instead of every caller writing
+    // the same requestAnimationFrame again. `enabled` off returns the ref
+    // untouched — a screen that must not steal focus keeps the same shape.
+    const { enabled = true, ref: given } = opts;
+    const own = useRef(null);
+    const ref = given || own;
+    useEffect(() => {
+        if (!enabled) return undefined;
+        const id = requestAnimationFrame(() => {
+            const el = ref.current;
+            if (!el) return;
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+        });
+        return () => cancelAnimationFrame(id);
+    }, [when, enabled, ref]);
+    return ref;
+}
+
+/**
+ * One keyboard map for a screen.
+ *
+ *   useShortcuts({ F2: openPayment, F4: search, Escape: close });
+ *
+ * Replaces the pattern this project grew into on the sales page: a single
+ * `window.keydown` listener holding every piece of screen state, re-registered
+ * on every keystroke because its dependency array has thirty entries. That is
+ * both slow and impossible to reason about — nobody can say what F4 does
+ * without reading nine hundred lines.
+ *
+ * Here the handlers live in a ref, so the listener is attached once and never
+ * re-registered, and each key says plainly what it does.
+ *
+ * A key is ignored while the operator is typing into a field, unless it is a
+ * function key or Escape — those are commands, and a till operator expects F2
+ * to work without leaving the quantity box first.
+ */
+export function useShortcuts(map, enabled = true) {
+    const latest = useRef(map);
+    latest.current = map;
+
+    useEffect(() => {
+        if (!enabled) return undefined;
+        const onKey = (e) => {
+            const handlers = latest.current || {};
+            const key = e.key;
+            const fn = handlers[key];
+            if (typeof fn !== 'function') return;
+
+            const tag = (e.target?.tagName || '').toUpperCase();
+            const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+                || e.target?.isContentEditable;
+            const isCommand = /^F\d{1,2}$/.test(key) || key === 'Escape';
+            if (typing && !isCommand) return;
+
+            e.preventDefault();
+            fn(e);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [enabled]);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -477,10 +697,18 @@ export const money = (v, dp = 2) =>
    ══════════════════════════════════════════════════════════ */
 
 /** Toolbar row for a list view: search on the left, filters + New on the right. */
-export function ListToolbar({ search, onSearch, placeholder = 'Search…', count, countLabel = 'records', filters, actions }) {
+export function ListToolbar({
+    search, onSearch, placeholder = 'Search…', count, countLabel = 'records', filters, actions,
+    autoFocus = false, searchRef,
+}) {
+    // `autoFocus` is opt-in rather than always on: on a screen where a form and
+    // a list share one render, the form owns the cursor, and a toolbar that
+    // grabbed it on mount would quietly undo that.
+    const ref = usePageFocus(undefined, { enabled: autoFocus, ref: searchRef });
     return (
         <Toolbar>
             <SearchInput
+                ref={ref}
                 className="w-full max-w-[300px]"
                 value={search}
                 onChange={e => onSearch(e.target.value)}
@@ -533,6 +761,10 @@ export function FormSection({ title, description, children, className }) {
 }
 
 /** Horizontal tab strip — for splitting a long form or a list by status. */
+export {
+    BusinessConfigProvider, useBusinessConfig, useModule, SCREEN_MODULE,
+} from './business-config';
+
 export function Tabs({ value, onChange, items }) {
     return (
         <div role="tablist" className="flex items-end gap-1 px-4 bg-[var(--pos-surface)] border-b border-[var(--pos-line)] overflow-x-auto pos-scroll">

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { Search, ArrowLeft, Loader2, AlertTriangle, PlusCircle, LayoutGrid, CheckCircle, ChevronDown, Plus, XCircle, Pencil, Trash2, Package, IndianRupee, Save } from 'lucide-react';
 import { gql } from '../../core/queries/gql';
 import { GetPosCategoriesQuery, GetPosProductsQuery, invalidateProductsCache, invalidateCategoriesCache } from '../../core/queries/PosQueries';
@@ -96,9 +97,13 @@ async function deleteVendureProduct(productId) {
 }
 
 export default function ProductsModule() {
+    const [viewState, setViewState] = useState('loading');
+    // The search box does not exist while the categories are loading, so the
+    // focus is re-tried when the view changes rather than only on mount.
+    const searchRef = usePageFocus(viewState);
+
     const [categories, setCategories] = useState([]);
     const [products, setProducts] = useState([]);
-    const [viewState, setViewState] = useState('loading');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [catSearch, setCatSearch] = useState('');
     const [prodSearch, setProdSearch] = useState('');
@@ -300,7 +305,7 @@ export default function ProductsModule() {
                 </div>
                 <div className="relative w-full max-w-sm">
                     <Search className="absolute left-3 top-2.5 text-slate-700" size={18}/>
-                    <input type="text" value={catSearch} onChange={e => setCatSearch(e.target.value)} placeholder="Search category..." className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-sm text-slate-800"/>
+                    <input ref={searchRef} type="text" value={catSearch} onChange={e => setCatSearch(e.target.value)} placeholder="Search category..." className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-sm text-slate-800"/>
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50">

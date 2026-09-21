@@ -30,6 +30,19 @@ const PERMISSION_LIST = [
     'CreateProduct', 'ReadProduct', 'UpdateProduct', 'DeleteProduct',
 ];
 
+/*
+ * These keys still say 'pharma' and must NOT be renamed on their own.
+ *
+ * They are browser localStorage keys, so the operator's saved companies, print
+ * settings and barcode configuration are stored under these exact names on
+ * their machine. Renaming the constant renames the key, and the next time they
+ * open the app their settings are simply gone — the old key is still there,
+ * holding data nothing reads any more.
+ *
+ * They disappear properly when these screens move to the server, which is where
+ * this data should have lived all along. Until then the ugly name is the price
+ * of not losing somebody's setup.
+ */
 const COMPANY_KEY = 'pharma_companies';
 const ACTIVE_COMPANY_KEY = 'pharma_active_company';
 const CONFIG_KEY = 'pharma_config';

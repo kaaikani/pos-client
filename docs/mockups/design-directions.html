@@ -1,0 +1,800 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Design Directions</title>
+<style>
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  background:#8A94A6; font-size:12px;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.page{width:297mm; height:210mm; margin:0 auto 6mm; padding:9mm 10mm;
+      page-break-after:always; position:relative; overflow:hidden; background:#F7FAFC; color:#2D3748}
+.page:last-child{page-break-after:auto}
+@page{size:A4 landscape; margin:0}
+@media print{ body{background:#fff} .page{margin:0} }
+
+h1{font-size:27px; font-weight:680; letter-spacing:-.5px}
+h2{font-size:18px; font-weight:670; letter-spacing:-.3px}
+.sub{font-size:12.5px; color:#718096; margin-top:3px}
+.kicker{font-size:9.5px; font-weight:750; letter-spacing:1.3px; text-transform:uppercase; color:#718096}
+.pagenum{position:absolute; right:10mm; bottom:6mm; font-size:9.5px; color:#A0AEC0}
+.foot{position:absolute; left:10mm; bottom:6mm; font-size:9.5px; color:#718096}
+.tag{display:inline-block; font-size:9px; font-weight:750; letter-spacing:.7px; text-transform:uppercase;
+     padding:3px 9px; border-radius:99px}
+
+/* shared skeleton for a screen mock */
+.scr{border-radius:14px; overflow:hidden; display:flex; flex-direction:column}
+.scr .top{display:flex; align-items:center; gap:9px; padding:0 15px; height:50px; flex:none}
+.scr .main{flex:1; display:flex; gap:12px; padding:13px 15px; min-height:0}
+.scr .keys{height:28px; display:flex; align-items:center; gap:16px; padding:0 15px; font-size:10px; flex:none}
+.num{font-variant-numeric:tabular-nums; letter-spacing:-.4px}
+.scr .prime, .scr .ctl{white-space:nowrap}
+.scr [style*="Save"]{white-space:nowrap}
+.pill{display:inline-flex; align-items:center; gap:4px; font-size:8.5px; font-weight:700;
+      padding:2px 7px; border-radius:99px; letter-spacing:.2px}
+.av{width:26px; height:26px; border-radius:8px; display:grid; place-items:center;
+    font-size:10px; font-weight:750; flex:none}
+
+/* ─────────── A · DARK ─────────── */
+.A{background:#10151C; color:#E7EDF5; box-shadow:0 18px 40px -14px rgba(10,14,20,.6)}
+.A .top{background:#151C25; border-bottom:1px solid #FFFFFF14}
+.A .main{background:#10151C}
+.A .keys{background:#0C1117; border-top:1px solid #FFFFFF10; color:#7E8C9F}
+.A .card{background:#171F29; border:1px solid #FFFFFF12; border-radius:12px}
+.A .hd{background:#131A23; color:#7E8C9F}
+.A .mut{color:#8593A5}
+.A .row{border-bottom:1px solid #FFFFFF0D}
+.A .sel{background:linear-gradient(90deg,#F7941D1F,#F7941D05); box-shadow:inset 3px 0 0 #F7941D}
+.A .ctl{background:#0D1218; border:1px solid #FFFFFF16; border-radius:8px; color:#C7D2E0}
+.A .prime{background:linear-gradient(135deg,#F7941D,#EE3A24); color:#fff; border:0;
+          box-shadow:0 5px 16px -4px #EE3A2470}
+.A .scan{background:#0D1218; border:1.5px solid #F7941D; border-radius:11px;
+         box-shadow:0 0 0 4px #F7941D26, 0 6px 18px -6px #F7941D50}
+.A .tot{background:linear-gradient(160deg,#1C2631,#141C25); border:1px solid #FFFFFF14; border-radius:12px}
+.A .good{background:#10B9811A; border:1px solid #10B98140; color:#34D399; border-radius:11px}
+
+/* ─────────── B · LIGHT ─────────── */
+.B{background:#F4F6FA; color:#1F2937; box-shadow:0 18px 40px -16px rgba(31,41,55,.30)}
+.B .top{background:#fff; border-bottom:1px solid #E6EAF1}
+.B .main{background:#F4F6FA}
+.B .keys{background:#fff; border-top:1px solid #E6EAF1; color:#8A94A6}
+.B .card{background:#fff; border:1px solid #E9EDF3; border-radius:13px;
+         box-shadow:0 1px 2px rgba(31,41,55,.04), 0 10px 22px -14px rgba(31,41,55,.18)}
+.B .hd{background:#F7F9FC; color:#8A94A6}
+.B .mut{color:#8A94A6}
+.B .row{border-bottom:1px solid #F1F4F8}
+.B .sel{background:#FFF8F1; box-shadow:inset 3px 0 0 #F7941D}
+.B .ctl{background:#fff; border:1px solid #E2E8F0; border-radius:8px; color:#4A5568}
+.B .prime{background:linear-gradient(135deg,#F7941D,#EE3A24); color:#fff; border:0;
+          box-shadow:0 6px 16px -5px #EE3A2455}
+.B .scan{background:#fff; border:1.5px solid #F7941D; border-radius:11px;
+         box-shadow:0 0 0 4px #F7941D1F, 0 8px 20px -10px #F7941D66}
+.B .tot{background:linear-gradient(160deg,#FFFFFF,#F7F9FC); border:1px solid #E9EDF3; border-radius:13px;
+        box-shadow:0 1px 2px rgba(31,41,55,.04), 0 12px 26px -16px rgba(31,41,55,.22)}
+.B .good{background:#ECFDF5; border:1px solid #A7F3D0; color:#047857; border-radius:11px}
+
+/* ─────────── C · WARM ─────────── */
+.C{background:#FBF7F2; color:#2A211B; box-shadow:0 18px 40px -16px rgba(80,50,30,.28)}
+.C .top{background:linear-gradient(120deg,#F7941D,#EE3A24); border-bottom:0; color:#fff}
+.C .main{background:#FBF7F2}
+.C .keys{background:#F3EBE1; border-top:1px solid #E7D9C9; color:#8A7360}
+.C .card{background:#fff; border:1px solid #EFE3D6; border-radius:13px;
+         box-shadow:0 1px 2px rgba(80,50,30,.05), 0 10px 22px -14px rgba(80,50,30,.20)}
+.C .hd{background:#FCF6EF; color:#9A8875}
+.C .mut{color:#9A8875}
+.C .row{border-bottom:1px solid #F6EFE7}
+.C .sel{background:#FFF4E6; box-shadow:inset 3px 0 0 #EE3A24}
+.C .ctl{background:#fff; border:1px solid #E7D9C9; border-radius:8px; color:#5C4A3B}
+.C .prime{background:#1F2937; color:#fff; border:0; box-shadow:0 6px 16px -5px rgba(31,41,55,.45)}
+.C .scan{background:#fff; border:1.5px solid #EE3A24; border-radius:11px;
+         box-shadow:0 0 0 4px #EE3A241A, 0 8px 20px -10px #EE3A2455}
+.C .tot{background:linear-gradient(150deg,#2A211B,#3D2E24); border:0; border-radius:13px; color:#FBF7F2}
+.C .good{background:#E9F7EF; border:1px solid #A8DCC0; color:#1B7A4B; border-radius:11px}
+</style>
+</head>
+<body>
+
+<!-- ══════ COVER ══════ -->
+<div class="page">
+  <div class="kicker">AVS Ecom Hub · POS</div>
+  <h1 style="margin-top:6px">Design directions — moonu look, ore page</h1>
+  <div class="sub" style="max-width:190mm">
+    Munnadi kuduthadhu plain-a irundhadhu. Yen-nu keezha irukku. Ippo <b>ore</b> sale page-ai
+    <b>moonu vidhamaa</b> pannirukken. Edhu pidikkudho sollunga — adhe look ellaa screen-kum varum.
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px">
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25)">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:13px">Yen plain-a irundhadhu</div>
+      <div style="padding:11px 13px; font-size:11.5px; line-height:1.75; color:#4A5568">
+        Namma design rule-la ipdi ezhudhirukku —<br>
+        <i style="color:#718096">"accent colour oru screen-ku oru primary button-ku, focus ring-ku mattum.
+        Bill number, per, thalaippu, badge — ellam mai-niram."</i><br><br>
+        Andha rule <b>thappilla</b>. Thagaval nirambiya screen-ku adhu sari.
+        Aana adhu mattum irundhaa screen <b>saambal-nirama</b>, plain-a theriyum.<br><br>
+        <b>Sari seiyura vazhi:</b> rule-ai udaikkaadhu — <b>valarthu</b>. Niram thagaval-ai sollanum
+        (stock kammi, expiry, meedhi) — alangaaram-ku illa. Kooda <b>aazham</b> (shadow),
+        <b>idam</b> (spacing), <b>ezhuthu alavu</b> (hierarchy) — moonum niram illaama azhagu tharum.
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25)">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:13px">Moonu direction</div>
+      <div style="padding:11px 13px; font-size:11.5px; line-height:1.9; color:#4A5568">
+        <div style="display:flex; gap:9px; align-items:flex-start">
+          <span class="tag" style="background:#10151C; color:#F7941D">A</span>
+          <div><b>Dark till</b> — karuppu thirai, periya velli-niram number.
+            <span style="color:#718096">Neenda neram paarkka kann valikkaadhu. Modern POS ellam idhu.</span></div></div>
+        <div style="display:flex; gap:9px; align-items:flex-start; margin-top:7px">
+          <span class="tag" style="background:#EEF2F7; color:#1F2937">B</span>
+          <div><b>Light elevated</b> — vellai card, meludhuvaana nizhal, adhigam idam.
+            <span style="color:#718096">Sutthama, nambagamaa. Modern software ellam idhu.</span></div></div>
+        <div style="display:flex; gap:9px; align-items:flex-start; margin-top:7px">
+          <span class="tag" style="background:linear-gradient(120deg,#F7941D,#EE3A24); color:#fff">C</span>
+          <div><b>Warm brand</b> — namma orange/red brand niram mela, karuppu total panel.
+            <span style="color:#718096">Namma company-oda adaiyaalam theriyum.</span></div></div>
+        <div style="margin-top:11px; padding-top:10px; border-top:1px solid #F1F4F8; font-size:11px; color:#718096">
+          Moonulum <b>ore thagaval</b>, <b>ore UX</b> — scan box, naalu column, periya total,
+          F-key bar. <b>Look</b> mattum vera.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px; background:#FFF8F1; border:1px solid #FBD38D; border-radius:11px; padding:11px 14px; font-size:11.5px; color:#4A5568">
+    <b style="color:#C05621">UX-ai onnum maathala.</b> Cursor scan box-la landing, Enter adutha kattam,
+    F1 save, F2 print, meedhi periya ezhuthu — moonu direction-lum ondre. Neenga
+    <b>niram + aazham</b> mattum thernthedukkireenga.
+  </div>
+
+  <div class="foot">Mockup — code onnum maathala</div><div class="pagenum">1 / 5</div>
+</div>
+
+
+<!-- ══════ A · DARK ══════ -->
+<div class="page" style="background:#E8EBF0">
+  <div style="display:flex; align-items:baseline; gap:11px">
+    <span class="tag" style="background:#10151C; color:#F7941D">Direction A</span>
+    <h2>Dark till</h2>
+    <div class="sub" style="margin:0">Karuppu thirai · periya velli number · orange brand mattum mukkiyamana idathula</div>
+  </div>
+
+  <div class="scr A" style="margin-top:9px; height:152mm">
+    <div class="top">
+      <div style="width:28px; height:28px; border-radius:9px; background:linear-gradient(135deg,#F7941D,#EE3A24);
+                  display:grid; place-items:center; color:#fff; font-weight:800; font-size:12px">A</div>
+      <div style="font-size:15px; font-weight:660">Sale</div>
+      <div style="display:flex; background:#0D1218; border:1px solid #FFFFFF14; border-radius:9px; padding:2px">
+        <span style="padding:3px 13px; border-radius:7px; font-size:10.5px; font-weight:700;
+                     background:linear-gradient(135deg,#F7941D,#EE3A24); color:#fff">Cash</span>
+        <span style="padding:3px 13px; font-size:10.5px; font-weight:600; color:#7E8C9F">Credit</span>
+      </div>
+      <span class="ctl num" style="padding:5px 11px; font-size:11px">2026-27/0148</span>
+      <span class="ctl num" style="padding:5px 11px; font-size:11px">15/09/2026</span>
+      <div style="flex:1"></div>
+      <span class="ctl" style="width:29px; height:29px; display:grid; place-items:center; font-size:14px">&#9881;</span>
+    </div>
+
+    <div class="main">
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:11px">
+        <div class="scan" style="height:46px; display:flex; align-items:center; padding:0 15px; gap:10px">
+          <span style="font-size:16px; color:#F7941D">&#9906;</span>
+          <span style="font-size:15px; color:#6F7E92">Barcode adinga, illa item per adinga…</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9.5px; color:#F7941D; font-weight:650">CURSOR INGA</span>
+        </div>
+
+        <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column">
+          <div class="hd" style="display:flex; padding:7px 13px; font-size:8.5px; font-weight:750; letter-spacing:.9px">
+            <span style="width:36px">#</span><span style="flex:1">ITEM</span>
+            <span style="width:54px; text-align:right">QTY</span>
+            <span style="width:68px; text-align:right">RATE</span>
+            <span style="width:78px; text-align:right">AMOUNT</span>
+          </div>
+
+          <div class="row sel" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#F7941D1F; color:#F7941D">IR</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:620">Idli Rice 25kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">R2411</span>
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">Exp 06/27</span>
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">MRP 1,350</span>
+                <span class="pill" style="background:#3B82F61F; color:#7CB2F8">GST 5%</span>
+                <span class="pill" style="background:#10B9811A; color:#34D399">Stock 42</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:650">2 <span style="font-size:9.5px; color:#8593A5">Bag</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">1,240.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:680">2,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#FFFFFF0D; color:#9FB0C4">TD</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:620">Toor Dal 1kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">TD07</span>
+                <span class="pill" style="background:#F59E0B1F; color:#FBBF24">Exp 11/26</span>
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">MRP 165</span>
+                <span class="pill" style="background:#3B82F61F; color:#7CB2F8">GST 5%</span>
+                <span class="pill" style="background:#10B9811A; color:#34D399">1 free</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:650">10 <span style="font-size:9.5px; color:#8593A5">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">148.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:680">1,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#FFFFFF0D; color:#9FB0C4">SO</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:620">Sunflower Oil 1L</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">SF19</span>
+                <span class="pill" style="background:#FFFFFF0F; color:#9FB0C4">Exp 03/27</span>
+                <span class="pill" style="background:#3B82F61F; color:#7CB2F8">GST 5%</span>
+                <span class="pill" style="background:#F59E0B1F; color:#FBBF24">2% disc</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:650">6 <span style="font-size:9.5px; color:#8593A5">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">152.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:680">893.76</span>
+          </div>
+
+          <div style="flex:1"></div>
+          <div style="padding:8px 13px; border-top:1px solid #FFFFFF10; display:flex; gap:16px; font-size:10px; color:#7E8C9F">
+            <span><b style="color:#C7D2E0">3</b> line</span><span><b style="color:#C7D2E0">18</b> qty</span>
+            <div style="flex:1"></div><span>&#8593;&#8595; varisai · Enter thirutha</span>
+          </div>
+        </div>
+
+        <div class="card" style="padding:9px 13px; display:flex; align-items:center; gap:9px">
+          <span style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#7E8C9F">CHARGES</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Delivery &nbsp; 50.00</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Packing &nbsp; 20.00</span>
+          <span class="ctl" style="padding:4px 10px; font-size:10.5px; color:#F7941D">+ Charge</span>
+        </div>
+      </div>
+
+      <div style="width:78mm; flex:none; display:flex; flex-direction:column; gap:11px">
+        <div class="card" style="padding:11px 13px">
+          <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#7E8C9F">CUSTOMER</div>
+          <div style="display:flex; align-items:center; gap:9px; margin-top:6px">
+            <span class="av" style="width:30px; height:30px; border-radius:9px; background:#3B82F61F; color:#7CB2F8; font-size:11px">MS</span>
+            <div style="flex:1">
+              <div style="font-size:13.5px; font-weight:620">Murugan Stores</div>
+              <div style="font-size:10px; color:#8593A5">94421 56780</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:8.5px; color:#8593A5">PAZHAIYA MEEDHI</div>
+              <div class="num" style="font-size:13px; font-weight:700; color:#FBBF24">₹ 8,410</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tot" style="flex:1; padding:13px; display:flex; flex-direction:column">
+          <div style="font-size:11.5px; color:#9FB0C4">
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Subtotal</span><span class="num">4,853.76</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Discount</span><span class="num">-18.24</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>CGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>SGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Charges</span><span class="num">70.00</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0; color:#6F7E92"><span>Round off</span><span class="num">-0.20</span></div>
+          </div>
+          <div style="margin-top:10px; padding-top:11px; border-top:1px solid #FFFFFF1A">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:1px; color:#7E8C9F">MOTTHAM</div>
+            <div class="num" style="font-size:38px; font-weight:730; line-height:1.05; color:#fff; letter-spacing:-1.6px">₹&thinsp;5,147</div>
+          </div>
+          <div style="margin-top:11px">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#7E8C9F; margin-bottom:5px">VAANGIYADHU</div>
+            <div class="num" style="height:38px; background:#0D1218; border:1.5px solid #FFFFFF1F; border-radius:10px;
+                        display:flex; align-items:center; padding:0 12px; font-size:19px; font-weight:680; color:#fff">5,200</div>
+          </div>
+          <div class="good" style="margin-top:10px; padding:9px 12px">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; opacity:.85">MEEDHI KUDUKKA</div>
+            <div class="num" style="font-size:26px; font-weight:730; line-height:1.15">₹&thinsp;53</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex; gap:8px; margin-top:11px">
+            <span class="ctl" style="flex:1; height:36px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:11.5px; font-weight:650; white-space:nowrap">Print &nbsp;<span style="color:#7E8C9F">F2</span></span>
+            <span class="prime" style="flex:1.5; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:12.5px; font-weight:700; white-space:nowrap">Save &amp; Print &nbsp;<span style="opacity:.8">F1</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><b style="color:#C7D2E0">F1</b> Save</span><span><b style="color:#C7D2E0">F2</b> Print</span>
+      <span><b style="color:#C7D2E0">F3</b> Discount</span><span><b style="color:#C7D2E0">F6</b> Customer</span>
+      <span><b style="color:#C7D2E0">F7</b> Hold</span><span><b style="color:#C7D2E0">F12</b> Last bills</span>
+      <div style="flex:1"></div><span>Mouse thevaiye illa</span>
+    </div>
+  </div>
+
+  <div class="foot">Niram thagaval sollum: <b>pachai</b> stock irukku · <b>manjal</b> expiry pakkathula · <b>neelam</b> GST · <b>orange</b> namma brand</div>
+  <div class="pagenum">2 / 5</div>
+</div>
+
+
+<!-- ══════ B · LIGHT ══════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:11px">
+    <span class="tag" style="background:#EEF2F7; color:#1F2937">Direction B</span>
+    <h2>Light elevated</h2>
+    <div class="sub" style="margin:0">Vellai card · meludhuvaana nizhal · adhigam idam · niram thagaval-ku mattum</div>
+  </div>
+
+  <div class="scr B" style="margin-top:9px; height:152mm">
+    <div class="top">
+      <div style="width:28px; height:28px; border-radius:9px; background:linear-gradient(135deg,#F7941D,#EE3A24);
+                  display:grid; place-items:center; color:#fff; font-weight:800; font-size:12px">A</div>
+      <div style="font-size:15px; font-weight:670">Sale</div>
+      <div style="display:flex; background:#EEF2F7; border-radius:9px; padding:2px">
+        <span style="padding:3px 13px; border-radius:7px; font-size:10.5px; font-weight:700; background:#fff; color:#1F2937;
+                     box-shadow:0 1px 3px rgba(31,41,55,.12)">Cash</span>
+        <span style="padding:3px 13px; font-size:10.5px; font-weight:600; color:#8A94A6">Credit</span>
+      </div>
+      <span class="ctl num" style="padding:5px 11px; font-size:11px">2026-27/0148</span>
+      <span class="ctl num" style="padding:5px 11px; font-size:11px">15/09/2026</span>
+      <div style="flex:1"></div>
+      <span class="ctl" style="width:29px; height:29px; display:grid; place-items:center; font-size:14px">&#9881;</span>
+    </div>
+
+    <div class="main">
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:11px">
+        <div class="scan" style="height:46px; display:flex; align-items:center; padding:0 15px; gap:10px">
+          <span style="font-size:16px; color:#F7941D">&#9906;</span>
+          <span style="font-size:15px; color:#A0AEC0">Barcode adinga, illa item per adinga…</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9.5px; color:#C05621; font-weight:700">CURSOR INGA</span>
+        </div>
+
+        <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column">
+          <div class="hd" style="display:flex; padding:8px 13px; font-size:8.5px; font-weight:750; letter-spacing:.9px;
+                      border-bottom:1px solid #EDF1F6">
+            <span style="width:36px">#</span><span style="flex:1">ITEM</span>
+            <span style="width:54px; text-align:right">QTY</span>
+            <span style="width:68px; text-align:right">RATE</span>
+            <span style="width:78px; text-align:right">AMOUNT</span>
+          </div>
+
+          <div class="row sel" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#FEF0E2; color:#C05621">IR</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#1F2937">Idli Rice 25kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">R2411</span>
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">Exp 06/27</span>
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">MRP 1,350</span>
+                <span class="pill" style="background:#EAF2FE; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#ECFDF5; color:#047857">Stock 42</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">2 <span style="font-size:9.5px; color:#8A94A6">Bag</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">1,240.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">2,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#F1F4F8; color:#6B7684">TD</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#1F2937">Toor Dal 1kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">TD07</span>
+                <span class="pill" style="background:#FFF7E6; color:#B45309">Exp 11/26</span>
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">MRP 165</span>
+                <span class="pill" style="background:#EAF2FE; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#ECFDF5; color:#047857">1 free</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">10 <span style="font-size:9.5px; color:#8A94A6">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">148.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">1,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#F1F4F8; color:#6B7684">SO</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#1F2937">Sunflower Oil 1L</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">SF19</span>
+                <span class="pill" style="background:#F1F4F8; color:#6B7684">Exp 03/27</span>
+                <span class="pill" style="background:#EAF2FE; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#FFF7E6; color:#B45309">2% disc</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">6 <span style="font-size:9.5px; color:#8A94A6">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">152.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">893.76</span>
+          </div>
+
+          <div style="flex:1"></div>
+          <div style="padding:8px 13px; border-top:1px solid #EDF1F6; display:flex; gap:16px; font-size:10px; color:#8A94A6">
+            <span><b style="color:#4A5568">3</b> line</span><span><b style="color:#4A5568">18</b> qty</span>
+            <div style="flex:1"></div><span>&#8593;&#8595; varisai · Enter thirutha</span>
+          </div>
+        </div>
+
+        <div class="card" style="padding:9px 13px; display:flex; align-items:center; gap:9px">
+          <span style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#8A94A6">CHARGES</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Delivery &nbsp; 50.00</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Packing &nbsp; 20.00</span>
+          <span class="ctl" style="padding:4px 10px; font-size:10.5px; color:#C05621">+ Charge</span>
+        </div>
+      </div>
+
+      <div style="width:78mm; flex:none; display:flex; flex-direction:column; gap:11px">
+        <div class="card" style="padding:11px 13px">
+          <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#8A94A6">CUSTOMER</div>
+          <div style="display:flex; align-items:center; gap:9px; margin-top:6px">
+            <span class="av" style="width:30px; height:30px; border-radius:9px; background:#EAF2FE; color:#1D4ED8; font-size:11px">MS</span>
+            <div style="flex:1">
+              <div style="font-size:13.5px; font-weight:630">Murugan Stores</div>
+              <div style="font-size:10px; color:#8A94A6">94421 56780</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:8.5px; color:#8A94A6">PAZHAIYA MEEDHI</div>
+              <div class="num" style="font-size:13px; font-weight:700; color:#B45309">₹ 8,410</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tot" style="flex:1; padding:13px; display:flex; flex-direction:column">
+          <div style="font-size:11.5px; color:#4A5568">
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Subtotal</span><span class="num">4,853.76</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Discount</span><span class="num">-18.24</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>CGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>SGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Charges</span><span class="num">70.00</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0; color:#8A94A6"><span>Round off</span><span class="num">-0.20</span></div>
+          </div>
+          <div style="margin-top:10px; padding-top:11px; border-top:2px solid #1F2937">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:1px; color:#8A94A6">MOTTHAM</div>
+            <div class="num" style="font-size:38px; font-weight:730; line-height:1.05; color:#1F2937; letter-spacing:-1.6px">₹&thinsp;5,147</div>
+          </div>
+          <div style="margin-top:11px">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#8A94A6; margin-bottom:5px">VAANGIYADHU</div>
+            <div class="num" style="height:38px; background:#fff; border:1.5px solid #CBD5E0; border-radius:10px;
+                        display:flex; align-items:center; padding:0 12px; font-size:19px; font-weight:680">5,200</div>
+          </div>
+          <div class="good" style="margin-top:10px; padding:9px 12px">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; opacity:.85">MEEDHI KUDUKKA</div>
+            <div class="num" style="font-size:26px; font-weight:730; line-height:1.15">₹&thinsp;53</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex; gap:8px; margin-top:11px">
+            <span class="ctl" style="flex:1; height:36px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:11.5px; font-weight:650; white-space:nowrap">Print &nbsp;<span style="color:#8A94A6">F2</span></span>
+            <span class="prime" style="flex:1.5; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:12.5px; font-weight:700; white-space:nowrap">Save &amp; Print &nbsp;<span style="opacity:.8">F1</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><b style="color:#4A5568">F1</b> Save</span><span><b style="color:#4A5568">F2</b> Print</span>
+      <span><b style="color:#4A5568">F3</b> Discount</span><span><b style="color:#4A5568">F6</b> Customer</span>
+      <span><b style="color:#4A5568">F7</b> Hold</span><span><b style="color:#4A5568">F12</b> Last bills</span>
+      <div style="flex:1"></div><span>Mouse thevaiye illa</span>
+    </div>
+  </div>
+
+  <div class="foot">Aazham nizhal-la varudhu, niram-la illa. Pagal neram kadai-ku idhu vasadhi.</div>
+  <div class="pagenum">3 / 5</div>
+</div>
+
+
+<!-- ══════ C · WARM ══════ -->
+<div class="page" style="background:#EFE8E0">
+  <div style="display:flex; align-items:baseline; gap:11px">
+    <span class="tag" style="background:linear-gradient(120deg,#F7941D,#EE3A24); color:#fff">Direction C</span>
+    <h2>Warm brand</h2>
+    <div class="sub" style="margin:0">Namma orange/red mela · karuppu total panel · soodaana neutral</div>
+  </div>
+
+  <div class="scr C" style="margin-top:9px; height:152mm">
+    <div class="top">
+      <div style="width:28px; height:28px; border-radius:9px; background:#FFFFFF2E; border:1px solid #FFFFFF4D;
+                  display:grid; place-items:center; color:#fff; font-weight:800; font-size:12px">A</div>
+      <div style="font-size:15px; font-weight:670">Sale</div>
+      <div style="display:flex; background:#00000026; border-radius:9px; padding:2px">
+        <span style="padding:3px 13px; border-radius:7px; font-size:10.5px; font-weight:700; background:#fff; color:#C2410C">Cash</span>
+        <span style="padding:3px 13px; font-size:10.5px; font-weight:600; color:#FFFFFFCC">Credit</span>
+      </div>
+      <span class="num" style="padding:5px 11px; font-size:11px; background:#FFFFFF24; border:1px solid #FFFFFF3D; border-radius:8px">2026-27/0148</span>
+      <span class="num" style="padding:5px 11px; font-size:11px; background:#FFFFFF24; border:1px solid #FFFFFF3D; border-radius:8px">15/09/2026</span>
+      <div style="flex:1"></div>
+      <span style="width:29px; height:29px; display:grid; place-items:center; font-size:14px;
+                   background:#FFFFFF24; border:1px solid #FFFFFF3D; border-radius:8px">&#9881;</span>
+    </div>
+
+    <div class="main">
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:11px">
+        <div class="scan" style="height:46px; display:flex; align-items:center; padding:0 15px; gap:10px">
+          <span style="font-size:16px; color:#EE3A24">&#9906;</span>
+          <span style="font-size:15px; color:#B5A392">Barcode adinga, illa item per adinga…</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9.5px; color:#C2410C; font-weight:700">CURSOR INGA</span>
+        </div>
+
+        <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column">
+          <div class="hd" style="display:flex; padding:8px 13px; font-size:8.5px; font-weight:750; letter-spacing:.9px;
+                      border-bottom:1px solid #F3EAE1">
+            <span style="width:36px">#</span><span style="flex:1">ITEM</span>
+            <span style="width:54px; text-align:right">QTY</span>
+            <span style="width:68px; text-align:right">RATE</span>
+            <span style="width:78px; text-align:right">AMOUNT</span>
+          </div>
+
+          <div class="row sel" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#FDE7D3; color:#C2410C">IR</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#2A211B">Idli Rice 25kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">R2411</span>
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">Exp 06/27</span>
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">MRP 1,350</span>
+                <span class="pill" style="background:#E7EFFA; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#E9F7EF; color:#1B7A4B">Stock 42</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">2 <span style="font-size:9.5px; color:#9A8875">Bag</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">1,240.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">2,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#F6EFE7; color:#8A7360">TD</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#2A211B">Toor Dal 1kg</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">TD07</span>
+                <span class="pill" style="background:#FDF0DC; color:#B45309">Exp 11/26</span>
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">MRP 165</span>
+                <span class="pill" style="background:#E7EFFA; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#E9F7EF; color:#1B7A4B">1 free</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">10 <span style="font-size:9.5px; color:#9A8875">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">148.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">1,480.00</span>
+          </div>
+
+          <div class="row" style="display:flex; align-items:center; padding:9px 13px">
+            <span style="width:36px"><span class="av" style="background:#F6EFE7; color:#8A7360">SO</span></span>
+            <span style="flex:1">
+              <span style="font-size:14px; font-weight:630; color:#2A211B">Sunflower Oil 1L</span>
+              <span style="display:block; margin-top:3px; display:flex; gap:5px; flex-wrap:wrap">
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">SF19</span>
+                <span class="pill" style="background:#F6EFE7; color:#8A7360">Exp 03/27</span>
+                <span class="pill" style="background:#E7EFFA; color:#1D4ED8">GST 5%</span>
+                <span class="pill" style="background:#FDF0DC; color:#B45309">2% disc</span>
+              </span>
+            </span>
+            <span class="num" style="width:54px; text-align:right; font-size:15px; font-weight:660">6 <span style="font-size:9.5px; color:#9A8875">Pkt</span></span>
+            <span class="num" style="width:68px; text-align:right; font-size:14px">152.00</span>
+            <span class="num" style="width:78px; text-align:right; font-size:15px; font-weight:690">893.76</span>
+          </div>
+
+          <div style="flex:1"></div>
+          <div style="padding:8px 13px; border-top:1px solid #F3EAE1; display:flex; gap:16px; font-size:10px; color:#9A8875">
+            <span><b style="color:#5C4A3B">3</b> line</span><span><b style="color:#5C4A3B">18</b> qty</span>
+            <div style="flex:1"></div><span>&#8593;&#8595; varisai · Enter thirutha</span>
+          </div>
+        </div>
+
+        <div class="card" style="padding:9px 13px; display:flex; align-items:center; gap:9px">
+          <span style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#9A8875">CHARGES</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Delivery &nbsp; 50.00</span>
+          <span class="ctl num" style="padding:4px 10px; font-size:10.5px">Packing &nbsp; 20.00</span>
+          <span class="ctl" style="padding:4px 10px; font-size:10.5px; color:#C2410C">+ Charge</span>
+        </div>
+      </div>
+
+      <div style="width:78mm; flex:none; display:flex; flex-direction:column; gap:11px">
+        <div class="card" style="padding:11px 13px">
+          <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#9A8875">CUSTOMER</div>
+          <div style="display:flex; align-items:center; gap:9px; margin-top:6px">
+            <span class="av" style="width:30px; height:30px; border-radius:9px; background:#E7EFFA; color:#1D4ED8; font-size:11px">MS</span>
+            <div style="flex:1">
+              <div style="font-size:13.5px; font-weight:630">Murugan Stores</div>
+              <div style="font-size:10px; color:#9A8875">94421 56780</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:8.5px; color:#9A8875">PAZHAIYA MEEDHI</div>
+              <div class="num" style="font-size:13px; font-weight:700; color:#B45309">₹ 8,410</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tot" style="flex:1; padding:13px; display:flex; flex-direction:column">
+          <div style="font-size:11.5px; color:#C9BCB0">
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Subtotal</span><span class="num">4,853.76</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Discount</span><span class="num">-18.24</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>CGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>SGST 2.5%</span><span class="num">120.84</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0"><span>Charges</span><span class="num">70.00</span></div>
+            <div style="display:flex; justify-content:space-between; padding:2px 0; color:#A0917F"><span>Round off</span><span class="num">-0.20</span></div>
+          </div>
+          <div style="margin-top:10px; padding-top:11px; border-top:1px solid #FFFFFF26">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:1px; color:#C9BCB0">MOTTHAM</div>
+            <div class="num" style="font-size:38px; font-weight:730; line-height:1.05; color:#fff; letter-spacing:-1.6px">₹&thinsp;5,147</div>
+          </div>
+          <div style="margin-top:11px">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; color:#C9BCB0; margin-bottom:5px">VAANGIYADHU</div>
+            <div class="num" style="height:38px; background:#FFFFFF14; border:1.5px solid #FFFFFF33; border-radius:10px;
+                        display:flex; align-items:center; padding:0 12px; font-size:19px; font-weight:680; color:#fff">5,200</div>
+          </div>
+          <div style="margin-top:10px; padding:9px 12px; background:#34D3991F; border:1px solid #34D39947; border-radius:11px; color:#6EE7B7">
+            <div style="font-size:8.5px; font-weight:750; letter-spacing:.9px; opacity:.9">MEEDHI KUDUKKA</div>
+            <div class="num" style="font-size:26px; font-weight:730; line-height:1.15">₹&thinsp;53</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex; gap:8px; margin-top:11px">
+            <span style="flex:1; height:36px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:11.5px; font-weight:650; white-space:nowrap;
+                         background:#FFFFFF14; border:1px solid #FFFFFF2E; border-radius:9px; color:#EFE6DC">Print &nbsp;<span style="color:#A0917F">F2</span></span>
+            <span style="flex:1.5; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:12.5px; font-weight:700; white-space:nowrap;
+                         background:linear-gradient(135deg,#F7941D,#EE3A24); color:#fff">Save &amp; Print &nbsp;<span style="opacity:.8">F1</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><b style="color:#5C4A3B">F1</b> Save</span><span><b style="color:#5C4A3B">F2</b> Print</span>
+      <span><b style="color:#5C4A3B">F3</b> Discount</span><span><b style="color:#5C4A3B">F6</b> Customer</span>
+      <span><b style="color:#5C4A3B">F7</b> Hold</span><span><b style="color:#5C4A3B">F12</b> Last bills</span>
+      <div style="flex:1"></div><span>Mouse thevaiye illa</span>
+    </div>
+  </div>
+
+  <div class="foot">Brand niram mela oru pattai-la mattum. Velai nadakkura idam amaidhiyaa irukku.</div>
+  <div class="pagenum">4 / 5</div>
+</div>
+
+
+<!-- ══════ PATTERNS + PICK ══════ -->
+<div class="page">
+  <h2>Azhagu engirundhu varudhu — aaru vishayam</h2>
+  <div class="sub">Idhu <b>yosanai illa</b>, palaganna pattern. Moonu direction-lum idhe aaru thaan — niram mattum vera.</div>
+
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px">
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">1 · Aazham <span style="color:#8A94A6; font-weight:400">(elevation)</span></div>
+      <div style="padding:11px 13px">
+        <div style="display:flex; gap:9px; align-items:center; margin-bottom:9px">
+          <div style="width:52px; height:34px; background:#fff; border:1px solid #E2E8F0; border-radius:6px"></div>
+          <span style="color:#A0AEC0">&rarr;</span>
+          <div style="width:52px; height:34px; background:#fff; border:1px solid #E9EDF3; border-radius:11px;
+                      box-shadow:0 1px 2px rgba(31,41,55,.05), 0 10px 20px -12px rgba(31,41,55,.30)"></div>
+        </div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Border mattum = thattaiyaa. Meludhuvaana <b>nizhal</b> + <b>periya radius</b> = card "mithakkiradhu" madhiri.
+          Oru screen-la <b>moonu nilai</b> podhum: thirai, card, mithakkura panel.
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">2 · Ezhuthu alavu vithiyaasam</div>
+      <div style="padding:11px 13px">
+        <div style="margin-bottom:8px">
+          <div style="font-size:8.5px; font-weight:750; letter-spacing:1px; color:#8A94A6">MOTTHAM</div>
+          <div class="num" style="font-size:30px; font-weight:730; letter-spacing:-1.3px; line-height:1.1">₹ 5,147</div>
+          <div style="font-size:10px; color:#8A94A6">Subtotal 4,853.76</div>
+        </div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Ellame 12px-a iruntha edhuvum mukkiyam illa. <b>Mukkiyamaanadhu periyadhaa</b>,
+          meedhi siriyadhaa. 8px label &rarr; 30px number = <b>naalu madangu</b>.
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">3 · Niram = thagaval</div>
+      <div style="padding:11px 13px">
+        <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:9px">
+          <span class="pill" style="background:#ECFDF5; color:#047857">Stock 42</span>
+          <span class="pill" style="background:#FFF7E6; color:#B45309">Exp 11/26</span>
+          <span class="pill" style="background:#FEF2F2; color:#B91C1C">Stock illa</span>
+          <span class="pill" style="background:#EAF2FE; color:#1D4ED8">GST 5%</span>
+          <span class="pill" style="background:#F1F4F8; color:#6B7684">Batch</span>
+        </div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Pachai <b>nalladhu</b>, manjal <b>kavanam</b>, sivappu <b>aabathu</b>, neelam <b>vari</b>.
+          Alangaaram-ku niram illa — <b>oru paarvaiyil</b> puriyaradhukku.
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">4 · Varisai-ku oru mugam</div>
+      <div style="padding:11px 13px">
+        <div style="display:flex; align-items:center; gap:9px; margin-bottom:9px">
+          <span class="av" style="background:#FEF0E2; color:#C05621">IR</span>
+          <span class="av" style="background:#EAF2FE; color:#1D4ED8">TD</span>
+          <span class="av" style="background:#ECFDF5; color:#047857">SO</span>
+          <span style="font-size:10px; color:#8A94A6">&larr; kann pidichukkum</span>
+        </div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Ezhuthu mattum irundha varisai ellam ondre madhiri. Chinna <b>mudhal ezhuthu kattam</b>
+          varisaikku <b>thaalam</b> tharudhu — thedaama kann pogum.
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; box-shadow:0 10px 22px -16px rgba(31,41,55,.25); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">5 · Idam <span style="color:#8A94A6; font-weight:400">(spacing)</span></div>
+      <div style="padding:11px 13px">
+        <div style="display:flex; gap:9px; margin-bottom:9px">
+          <div style="flex:1; border:1px solid #E2E8F0; border-radius:6px; padding:2px 4px; font-size:7px; color:#8A94A6; line-height:1.25">
+            Idli Rice<br>Toor Dal<br>Oil<br>Sugar<br>Rice</div>
+          <div style="flex:1; border:1px solid #E9EDF3; border-radius:9px; padding:6px 8px; font-size:7px; color:#4A5568; line-height:2.2">
+            Idli Rice<br>Toor Dal<br>Oil</div>
+        </div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Nerukkam = malivaana theatrram. <b>Suvasikka idam</b> viduradhu <b>vilaiyuyarndhadhaa</b> theriyum.
+          Aana thagaval-ai kuraikkakoodadhu — adhaan siriya varisai udhavudhu.
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#FFF8F1; border:1px solid #FBD38D; border-radius:13px; box-shadow:0 10px 22px -16px rgba(192,86,33,.28); overflow:hidden">
+      <div style="padding:10px 13px; border-bottom:1px solid #FBD38D; font-weight:660; font-size:12.5px; color:#C05621">6 · Brand — konjam podhum</div>
+      <div style="padding:11px 13px">
+        <div style="height:26px; border-radius:8px; background:linear-gradient(120deg,#F7941D,#EE3A24); margin-bottom:9px"></div>
+        <div style="font-size:11px; color:#4A5568; line-height:1.65">
+          Namma orange/red <b>ore oru idathula</b> — logo, mukkiyamana button, focus ring.
+          Ellaa idathulum poattaa thalai valikkum. <b>Adaiyaalam</b> venum, <b>sandadi</b> vendaam.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px">
+    <div style="background:#fff; border:1px solid #E9EDF3; border-radius:13px; overflow:hidden; box-shadow:0 10px 22px -16px rgba(31,41,55,.25)">
+      <div style="padding:10px 13px; border-bottom:1px solid #F1F4F8; font-weight:660; font-size:12.5px">Edhu edhukku podhum</div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px">
+        <tr style="background:#F7F9FC; color:#8A94A6; font-size:8.5px; font-weight:750; letter-spacing:.8px">
+          <td style="padding:6px 13px">DIRECTION</td><td style="padding:6px 8px">EDHUKKU SARI</td><td style="padding:6px 13px">KAVANIKKA</td></tr>
+        <tr><td style="padding:7px 13px; border-top:1px solid #F1F4F8"><b>A · Dark</b></td>
+            <td style="padding:7px 8px; border-top:1px solid #F1F4F8; color:#4A5568">Restaurant, bar, iravu neram, thodarndhu 8 mani neram</td>
+            <td style="padding:7px 13px; border-top:1px solid #F1F4F8; color:#8A94A6">Veliccham adhigam-naa thirai theriyaadhu</td></tr>
+        <tr><td style="padding:7px 13px; border-top:1px solid #F1F4F8"><b>B · Light</b></td>
+            <td style="padding:7px 8px; border-top:1px solid #F1F4F8; color:#4A5568">Kirana, pharmacy, supermarket, pagal neram</td>
+            <td style="padding:7px 13px; border-top:1px solid #F1F4F8; color:#8A94A6">Iravu neram konjam pirakaasam</td></tr>
+        <tr><td style="padding:7px 13px; border-top:1px solid #F1F4F8"><b>C · Warm</b></td>
+            <td style="padding:7px 8px; border-top:1px solid #F1F4F8; color:#4A5568">Namma brand mukkiyam-naa, sales demo-ku</td>
+            <td style="padding:7px 13px; border-top:1px solid #F1F4F8; color:#8A94A6">Mela pattai niram thinam paakkanum</td></tr>
+        <tr style="background:#F0FDF4"><td style="padding:7px 13px; border-top:1px solid #F1F4F8"><b>Rendume</b></td>
+            <td colspan="2" style="padding:7px 8px; border-top:1px solid #F1F4F8; color:#166534">
+              A + B rendaiyum panna mudiyum — oru toggle. Ippove namma tokens-la light/dark irukku.</td></tr>
+      </table>
+    </div>
+
+    <div style="background:#1F2937; color:#E7EDF5; border-radius:13px; overflow:hidden; box-shadow:0 12px 26px -16px rgba(31,41,55,.5)">
+      <div style="padding:10px 13px; border-bottom:1px solid #FFFFFF14; font-weight:660; font-size:12.5px">Neenga sollavendiyadhu</div>
+      <div style="padding:12px 13px; font-size:12px; line-height:1.9">
+        <div><b style="color:#F7941D">"A pidikkum"</b> &nbsp;<span style="color:#9FB0C4">— dark-la ellam panren</span></div>
+        <div><b style="color:#F7941D">"B pidikkum"</b> &nbsp;<span style="color:#9FB0C4">— light-la ellam panren</span></div>
+        <div><b style="color:#F7941D">"A + B rendum"</b> &nbsp;<span style="color:#9FB0C4">— toggle vechiduven</span></div>
+        <div><b style="color:#F7941D">"C-oda mela pattai + B"</b> &nbsp;<span style="color:#9FB0C4">— kalandhum tharalaam</span></div>
+        <div style="margin-top:9px; padding-top:9px; border-top:1px solid #FFFFFF14; color:#9FB0C4; font-size:11px">
+          Edhuvum pidikkalanaa adhaiyum sollunga — "innum periya ezhuthu",
+          "pill vendaam", "niram kammi" — ethuvaa irundhaalum.
+          <b style="color:#E7EDF5">Neenga sollaama code onnum thodamaatten.</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Thernthedutha look &rarr; tokens.css-la pokum &rarr; ellaa 29 screen-um adhe look</div>
+  <div class="pagenum">5 / 5</div>
+</div>
+
+</body>
+</html>

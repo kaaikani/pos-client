@@ -1,0 +1,473 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Barcode + whole software</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;background:#8A94A6;font-size:12px;
+     -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:297mm;height:210mm;margin:0 auto 6mm;padding:9mm 10mm;page-break-after:always;
+      position:relative;overflow:hidden;background:#F4F6FA;color:#1F2937}
+.page:last-child{page-break-after:auto}
+@page{size:A4 landscape;margin:0}
+@media print{body{background:#fff}.page{margin:0}}
+h2{font-size:18px;font-weight:670;letter-spacing:-.3px}
+.sub{font-size:12.5px;color:#718096;margin-top:2px}
+.pagenum{position:absolute;right:10mm;bottom:6mm;font-size:9.5px;color:#A0AEC0}
+.foot{position:absolute;left:10mm;bottom:6mm;font-size:9.5px;color:#718096}
+.card{background:#fff;border:1px solid #E9EDF3;border-radius:13px;
+      box-shadow:0 1px 2px rgba(31,41,55,.04),0 10px 22px -14px rgba(31,41,55,.18)}
+.ch{padding:9px 13px;border-bottom:1px solid #F1F4F8;font-weight:660;font-size:12.5px}
+.cb{padding:11px 13px}
+.sect{font-size:8.5px;font-weight:750;letter-spacing:.9px;color:#8A94A6;text-transform:uppercase;
+      padding-bottom:4px;border-bottom:1px solid #F1F4F8;margin-bottom:6px}
+.ck{display:flex;align-items:flex-start;gap:7px;padding:1.5px 0;font-size:10.8px;color:#4A5568}
+.box{width:12px;height:12px;border-radius:3px;border:1.5px solid #CBD5E0;flex:none;margin-top:1px;background:#fff}
+.box.on{background:#4A5568;border-color:#4A5568;position:relative}
+.box.on:after{content:"";position:absolute;left:3.2px;top:1px;width:3.4px;height:6px;
+              border:solid #fff;border-width:0 1.7px 1.7px 0;transform:rotate(45deg)}
+.ctl{background:#fff;border:1px solid #E2E8F0;border-radius:8px;color:#4A5568;
+     display:inline-flex;align-items:center;padding:4px 10px;font-size:10.5px}
+.btn{height:26px;padding:0 11px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;
+     font-size:11px;font-weight:620;color:#4A5568;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn.p{background:linear-gradient(135deg,#F7941D,#EE3A24);color:#fff;border:0;
+       box-shadow:0 6px 16px -5px #EE3A2455}
+.pill{display:inline-flex;align-items:center;font-size:8.5px;font-weight:700;padding:2px 7px;border-radius:99px}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:#8A94A6;
+   font-weight:750;padding:6px 10px;background:#F7F9FC}
+td{padding:6px 10px;border-top:1px solid #F1F4F8;color:#4A5568}
+.note{background:#FFF8F1;border:1px solid #FBD38D;border-radius:10px;padding:9px 12px;font-size:11px;color:#4A5568}
+.note b{color:#C05621}
+.warn{background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:9px 12px;font-size:11px;color:#4A5568}
+.warn b{color:#B91C1C}
+.ok{background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:9px 12px;font-size:11px;color:#065F46}
+</style></head><body>
+
+<!-- ══════ 1 · THE PRINTED LABEL ══════ -->
+<div class="page">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <h2>1 · Barcode veliya varumpodhu — unmaiyaana alavu</h2>
+    <div class="sub" style="margin:0">Keezha irukkiradhu <b>1:1</b>. Indha thaal-ai print pannaa, sticker alavu appadiye varum.</div>
+  </div>
+
+  <div class="warn" style="margin-top:9px">
+    <b>Mudhalla oru unmai:</b> UI theme (dark / light / warm) <b>print-la varaadhu</b>.
+    Thermal label printer-la niram kidaiyaadhu — adhu veppaththaal karuppa suduthu, adhu mattum thaan.
+    Sticker eppovum <b>karuppu-vellai</b>. Maarradhu <b>screen</b> mattum — designer-oda thoarram.
+    Idhu kuraiyum illa; <b>ellaa</b> label printer-um ipdi thaan (Zebra, TSC, Citizen).
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="ch">Naalu alavu — ippove code-la irukkiradhu</div>
+    <div class="cb" style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+
+      <div>
+        <div style="font-size:9px;font-weight:750;letter-spacing:.8px;color:#8A94A6;margin-bottom:5px">35 × 22 mm</div>
+        
+<span style="position:relative;display:inline-block;width:35mm;height:22mm;background:#fff;
+             border:1px solid #CBD5E0;border-radius:1mm;overflow:hidden;
+             font-family:Helvetica,Arial,sans-serif;color:#000;vertical-align:top">
+  <span style="position:absolute;left:1.5mm;top:1mm;right:1.5mm;font-size:5.6pt;font-weight:700;
+               white-space:nowrap;overflow:hidden">Idli Rice 25kg</span>
+  <span style="position:absolute;left:1.5mm;top:4.2mm;font-size:4.6pt;color:#111">RICE-25</span>
+  <span style="position:absolute;right:1.5mm;top:4.2mm;font-size:4.6pt">MRP 1,350</span>
+  
+  <span style="position:absolute;left:0;top:10.6mm;width:35mm">
+    <span style="position:relative;display:block;width:35mm;height:6mm"><span style="position:absolute;left:2.00mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:3.25mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:4.50mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:5.75mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:7.50mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:8.25mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:9.75mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:11.00mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:12.25mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:13.25mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:14.50mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:16.00mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:17.00mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:18.25mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:19.25mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:20.25mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:21.00mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:21.50mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:23.25mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:24.00mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:25.00mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:26.00mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:26.75mm;top:0;width:0.50mm;height:6mm;background:#000"></span><span style="position:absolute;left:27.50mm;top:0;width:0.25mm;height:6mm;background:#000"></span><span style="position:absolute;left:28.00mm;top:0;width:0.75mm;height:6mm;background:#000"></span><span style="position:absolute;left:29.00mm;top:0;width:1.00mm;height:6mm;background:#000"></span><span style="position:absolute;left:30.75mm;top:0;width:1.00mm;height:6mm;background:#000"></span></span>
+  </span>
+  <span style="position:absolute;left:0;right:0;top:16.8mm;text-align:center;
+               font-size:5pt;letter-spacing:.6px;font-family:Courier,monospace">8901234567894</span>
+  <span style="position:absolute;left:1.5mm;bottom:0.6mm;font-size:5.8pt;font-weight:800">₹1,240</span>
+  
+</span>
+        <div style="font-size:9px;color:#8A94A6;margin-top:4px">Chinna item · adukku</div>
+      </div>
+
+      <div>
+        <div style="font-size:9px;font-weight:750;letter-spacing:.8px;color:#8A94A6;margin-bottom:5px">50 × 25 mm</div>
+        
+<span style="position:relative;display:inline-block;width:50mm;height:25mm;background:#fff;
+             border:1px solid #CBD5E0;border-radius:1mm;overflow:hidden;
+             font-family:Helvetica,Arial,sans-serif;color:#000;vertical-align:top">
+  <span style="position:absolute;left:1.5mm;top:1mm;right:1.5mm;font-size:6.4pt;font-weight:700;
+               white-space:nowrap;overflow:hidden">Toor Dal 1kg Premium</span>
+  <span style="position:absolute;left:1.5mm;top:4.8mm;font-size:5.2pt;color:#111">DAL-TR-1K</span>
+  <span style="position:absolute;right:1.5mm;top:4.8mm;font-size:5.2pt">MRP 165</span>
+  <span style="position:absolute;left:1.5mm;top:7.6mm;font-size:4.4pt;color:#111">B:TD07 &nbsp; E:11/26</span>
+  <span style="position:absolute;left:0;top:10.9mm;width:50mm">
+    <span style="position:relative;display:block;width:50mm;height:7.5mm"><span style="position:absolute;left:2.00mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:3.50mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:4.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:5.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:6.25mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:7.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:8.25mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:8.75mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:9.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:10.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:11.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:12.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:14.25mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:15.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:16.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:18.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:19.50mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:20.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:22.25mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:23.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:24.50mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:25.50mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:27.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:28.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:29.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:31.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:32.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:33.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:35.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:36.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:37.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:38.75mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:39.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:40.50mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:42.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:43.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:44.00mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:45.00mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:45.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:47.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span></span>
+  </span>
+  <span style="position:absolute;left:0;right:0;top:18.8mm;text-align:center;
+               font-size:5.6pt;letter-spacing:.6px;font-family:Courier,monospace">8901234567900</span>
+  <span style="position:absolute;left:1.5mm;bottom:0.6mm;font-size:7pt;font-weight:800">₹148.00</span>
+  
+</span>
+        <div style="font-size:9px;color:#8A94A6;margin-top:4px">Adhigam use aagura alavu</div>
+      </div>
+
+      <div>
+        <div style="font-size:9px;font-weight:750;letter-spacing:.8px;color:#8A94A6;margin-bottom:5px">40 × 30 mm</div>
+        
+<span style="position:relative;display:inline-block;width:40mm;height:30mm;background:#fff;
+             border:1px solid #CBD5E0;border-radius:1mm;overflow:hidden;
+             font-family:Helvetica,Arial,sans-serif;color:#000;vertical-align:top">
+  <span style="position:absolute;left:1.5mm;top:1mm;right:1.5mm;font-size:6.4pt;font-weight:700;
+               white-space:nowrap;overflow:hidden">Sunflower Oil 1L</span>
+  <span style="position:absolute;left:1.5mm;top:4.8mm;font-size:5.2pt;color:#111">OIL-SF-1L</span>
+  <span style="position:absolute;right:1.5mm;top:4.8mm;font-size:5.2pt">MRP 168</span>
+  <span style="position:absolute;left:1.5mm;top:7.6mm;font-size:4.4pt;color:#111">B:SF19 &nbsp; E:03/27</span>
+  <span style="position:absolute;left:0;top:14.4mm;width:40mm">
+    <span style="position:relative;display:block;width:40mm;height:9mm"><span style="position:absolute;left:2.00mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:3.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:4.25mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:5.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:7.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:8.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:9.25mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:10.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:11.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:12.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:14.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:15.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:16.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:17.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:18.50mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:19.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:21.00mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:22.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:23.00mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:24.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:25.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:27.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:28.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:29.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:30.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:31.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:32.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:33.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:34.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:35.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:36.25mm;top:0;width:1.00mm;height:9mm;background:#000"></span></span>
+  </span>
+  <span style="position:absolute;left:0;right:0;top:23.8mm;text-align:center;
+               font-size:5.6pt;letter-spacing:.6px;font-family:Courier,monospace">8901234567917</span>
+  <span style="position:absolute;left:1.5mm;bottom:0.6mm;font-size:7pt;font-weight:800">₹152.00</span>
+  
+</span>
+        <div style="font-size:9px;color:#8A94A6;margin-top:4px">Batch + expiry venum-naa</div>
+      </div>
+
+      <div>
+        <div style="font-size:9px;font-weight:750;letter-spacing:.8px;color:#8A94A6;margin-bottom:5px">65 × 35 mm &nbsp;<span style="color:#1D4ED8">+ QR</span></div>
+        
+<span style="position:relative;display:inline-block;width:65mm;height:35mm;background:#fff;
+             border:1px solid #CBD5E0;border-radius:1mm;overflow:hidden;
+             font-family:Helvetica,Arial,sans-serif;color:#000;vertical-align:top">
+  <span style="position:absolute;left:1.5mm;top:1mm;right:1.5mm;font-size:6.4pt;font-weight:700;
+               white-space:nowrap;overflow:hidden">Amla Hair Oil 200ml</span>
+  <span style="position:absolute;left:1.5mm;top:4.8mm;font-size:5.2pt;color:#111">AHO-200</span>
+  <span style="position:absolute;right:1.5mm;top:4.8mm;font-size:5.2pt">MRP 210</span>
+  <span style="position:absolute;left:1.5mm;top:7.6mm;font-size:4.4pt;color:#111">B:AH44 &nbsp; E:09/27</span>
+  <span style="position:absolute;left:0;top:19.4mm;width:65mm">
+    <span style="position:relative;display:block;width:65mm;height:9mm"><span style="position:absolute;left:2.00mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:2.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:3.25mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:4.25mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:5.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:6.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:7.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:8.25mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:9.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:10.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:11.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:12.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:13.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:14.50mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:15.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:16.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:17.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:18.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:19.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:20.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:22.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:22.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:23.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:24.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:25.50mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:26.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:27.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:28.50mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:29.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:30.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:32.00mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:33.00mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:34.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:36.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:37.25mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:39.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:40.25mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:42.00mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:42.75mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:43.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:45.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:46.25mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:47.25mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:49.00mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:50.25mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:51.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:51.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:52.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:53.75mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:54.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:55.50mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:57.00mm;top:0;width:0.50mm;height:9mm;background:#000"></span><span style="position:absolute;left:58.00mm;top:0;width:0.75mm;height:9mm;background:#000"></span><span style="position:absolute;left:59.25mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:60.00mm;top:0;width:0.25mm;height:9mm;background:#000"></span><span style="position:absolute;left:60.50mm;top:0;width:1.00mm;height:9mm;background:#000"></span><span style="position:absolute;left:61.75mm;top:0;width:0.50mm;height:9mm;background:#000"></span></span>
+  </span>
+  <span style="position:absolute;left:0;right:0;top:28.8mm;text-align:center;
+               font-size:5.6pt;letter-spacing:.6px;font-family:Courier,monospace">8901234567924</span>
+  <span style="position:absolute;left:1.5mm;bottom:0.6mm;font-size:7pt;font-weight:800">₹185.00</span>
+  <span style="position:absolute;right:1.5mm;top:1mm"><span style="position:relative;display:block;width:11mm;height:11mm"><span style="position:absolute;left:0.00mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:2.62mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:2.62mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.86mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:2.62mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:2.62mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.86mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:0.00mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:0.52mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:1.05mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:1.57mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:2.10mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:2.62mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.29mm;top:3.14mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:3.67mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:3.67mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:3.67mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:3.67mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.67mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:4.19mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.05mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.67mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.86mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:4.71mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.62mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.67mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:5.24mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.00mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:3.14mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:5.76mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:0.52mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:1.57mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:2.10mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.29mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:6.29mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:6.81mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:7.33mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.86mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.43mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:7.86mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:8.38mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:8.90mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.86mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:9.43mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.71mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.90mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:10.48mm;top:9.95mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:4.19mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.24mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:5.76mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:6.81mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:7.33mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:8.38mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span><span style="position:absolute;left:9.95mm;top:10.48mm;width:0.52mm;height:0.52mm;background:#000"></span></span></span>
+</span>
+        <div style="font-size:9px;color:#8A94A6;margin-top:4px">Pharmacy · UPI QR · serial</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:12px;margin-top:11px">
+    <div class="card"><div class="ch">Sticker-la enna varum — neenga mudivu</div><div class="cb">
+      <div style="display:flex;gap:14px">
+        <div style="flex:1">
+          <div class="ck"><div class="box on"></div><div>Item per</div></div>
+          <div class="ck"><div class="box on"></div><div>SKU</div></div>
+          <div class="ck"><div class="box on"></div><div>Vilai</div></div>
+          <div class="ck"><div class="box on"></div><div>MRP</div></div>
+          <div class="ck"><div class="box on"></div><div>Batch</div></div>
+          <div class="ck"><div class="box on"></div><div>Expiry</div></div>
+        </div>
+        <div style="flex:1">
+          <div class="ck"><div class="box"></div><div>Company per</div></div>
+          <div class="ck"><div class="box"></div><div>HSN</div></div>
+          <div class="ck"><div class="box"></div><div>Brand</div></div>
+          <div class="ck"><div class="box"></div><div>Category</div></div>
+          <div class="ck"><div class="box"></div><div>Edai / size</div></div>
+          <div class="ck"><div class="box"></div><div>Sondha ezhuthu</div></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#8A94A6;margin-top:7px">
+        <b style="color:#4A5568">17 field</b> + sondha ezhuthu — ellame ippove code-la irukku
+      </div>
+    </div></div>
+
+    <div class="card"><div class="ch">Barcode vagai</div><div class="cb">
+      <div class="ck"><div class="box on"></div><div><b>EAN-13</b><span style="display:block;font-size:9.5px;color:#8A94A6">13 ilakkam · kadai sarakku</span></div></div>
+      <div class="ck"><div class="box on"></div><div><b>EAN-8</b><span style="display:block;font-size:9.5px;color:#8A94A6">Chinna sticker-ku</span></div></div>
+      <div class="ck"><div class="box on"></div><div><b>Code 128</b><span style="display:block;font-size:9.5px;color:#8A94A6">Ezhuthu + ilakkam sernthu</span></div></div>
+      <div class="ck"><div class="box on"></div><div><b>QR</b><span style="display:block;font-size:9.5px;color:#8A94A6">UPI, link, batch vivaram</span></div></div>
+      <div class="ck"><div class="box on"></div><div><b>Auto</b><span style="display:block;font-size:9.5px;color:#8A94A6">Item-ai paarthu thaane theriyum</span></div></div>
+      <div class="ok" style="margin-top:7px;font-size:10px">Idhu ellame <b>ippove velai seiyudhu</b></div>
+    </div></div>
+
+    <div class="card"><div class="ch">Printer</div><div class="cb">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+        <span class="btn" style="height:22px;font-size:10px">Generic 50mm</span>
+        <span class="btn" style="height:22px;font-size:10px">Citizen 50mm</span>
+        <span class="btn" style="height:22px;font-size:10px">Zebra 57mm</span>
+        <span class="btn" style="height:22px;font-size:10px">TSC 50mm</span>
+      </div>
+      <div class="ck"><div class="box on"></div><div>QZ Tray — <b>neradiyaa</b> printer-ku<span style="display:block;font-size:9.5px;color:#8A94A6">Browser dialog varaadhu</span></div></div>
+      <div class="ck"><div class="box on"></div><div>PDF-a save / open</div></div>
+      <div class="ck"><div class="box on"></div><div>Oru thaal-la pala sticker<span style="display:block;font-size:9.5px;color:#8A94A6">A4-la 3 × 8 = 24</span></div></div>
+      <div class="note" style="margin-top:7px;font-size:10px">
+        Indha engine <b>nallaa irukku</b>. Naan adhai <b>thodamaatten</b> — screen-oda thoarram mattum maarum.
+      </div>
+    </div></div>
+  </div>
+
+  <div class="foot">Bar-gal unmaiyaana alavula (0.25mm module) varaiyapattadhu — scan aagumaanu paakka</div>
+  <div class="pagenum">1 / 4</div>
+</div>
+
+<!-- ══════ 2 · THE DESIGNER SCREEN ══════ -->
+<div class="page">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <h2>2 · Barcode designer — Direction B-la</h2>
+    <div class="sub" style="margin:0">Ippo: saambal-niram, chinna ezhuthu, dropdown adukku. Apuram: ondre, aana padikka mudiyum.</div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-top:9px;height:143mm">
+
+    <div class="card" style="width:74mm;flex:none;display:flex;flex-direction:column">
+      <div class="ch">Sticker</div>
+      <div class="cb" style="flex:1;overflow:hidden">
+        <div class="sect">Alavu</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px">
+          <span class="btn" style="height:23px;font-size:10px">35×22</span>
+          <span class="btn p" style="height:23px;font-size:10px">50×25</span>
+          <span class="btn" style="height:23px;font-size:10px">40×30</span>
+          <span class="btn" style="height:23px;font-size:10px">65×35</span>
+          <span class="btn" style="height:23px;font-size:10px">Custom</span>
+        </div>
+
+        <div class="sect">Sticker-la enna varum</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:5px">
+          <span class="btn p" style="height:22px;font-size:10px">Item per ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">SKU ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">Vilai ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">MRP ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">Batch ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">Expiry ×</span>
+          <span class="btn p" style="height:22px;font-size:10px">Barcode ×</span>
+          <span class="btn" style="height:22px;font-size:10px;color:#8A94A6">+ HSN</span>
+          <span class="btn" style="height:22px;font-size:10px;color:#8A94A6">+ Brand</span>
+          <span class="btn" style="height:22px;font-size:10px;color:#8A94A6">+ QR</span>
+          <span class="btn" style="height:22px;font-size:10px;color:#8A94A6">+ Ezhuthu</span>
+        </div>
+        <div style="font-size:9.5px;color:#8A94A6;margin-bottom:9px">Adicha udane pakkathula maarum · izhuthu nagarthalaam</div>
+
+        <div class="sect">Barcode vagai</div>
+        <div style="display:flex;gap:5px;margin-bottom:9px">
+          <span class="btn p" style="height:22px;font-size:10px">Auto</span>
+          <span class="btn" style="height:22px;font-size:10px">EAN-13</span>
+          <span class="btn" style="height:22px;font-size:10px">EAN-8</span>
+          <span class="btn" style="height:22px;font-size:10px">Code128</span>
+        </div>
+
+        <div class="sect">Thernthedutha field — Vilai</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:7px">
+          <div><div style="font-size:9px;color:#8A94A6;margin-bottom:2px">X mm</div><span class="ctl" style="width:100%">1.5</span></div>
+          <div><div style="font-size:9px;color:#8A94A6;margin-bottom:2px">Y mm</div><span class="ctl" style="width:100%">19.4</span></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="ctl">7 pt</span>
+          <span class="btn p" style="height:23px;width:26px;justify-content:center">L</span>
+          <span class="btn" style="height:23px;width:26px;justify-content:center">C</span>
+          <span class="btn" style="height:23px;width:26px;justify-content:center">R</span>
+          <span class="btn" style="height:23px;width:26px;justify-content:center;font-weight:850">B</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;display:flex;flex-direction:column">
+      <div class="ch" style="display:flex;align-items:center">
+        <span>Sticker — unmaiyaana alavu</span><div style="flex:1"></div>
+        <span style="font-size:10px;color:#8A94A6;font-weight:400">50 × 25 mm · izhuthu nagarthunga</span>
+      </div>
+      <div class="cb" style="flex:1;background:#F7F9FC;display:flex;align-items:center;justify-content:center">
+        <div style="transform:scale(2.6);transform-origin:center">
+          
+<span style="position:relative;display:inline-block;width:50mm;height:25mm;background:#fff;
+             border:1px solid #CBD5E0;border-radius:1mm;overflow:hidden;
+             font-family:Helvetica,Arial,sans-serif;color:#000;vertical-align:top">
+  <span style="position:absolute;left:1.5mm;top:1mm;right:1.5mm;font-size:6.4pt;font-weight:700;
+               white-space:nowrap;overflow:hidden">Toor Dal 1kg Premium</span>
+  <span style="position:absolute;left:1.5mm;top:4.8mm;font-size:5.2pt;color:#111">DAL-TR-1K</span>
+  <span style="position:absolute;right:1.5mm;top:4.8mm;font-size:5.2pt">MRP 165</span>
+  <span style="position:absolute;left:1.5mm;top:7.6mm;font-size:4.4pt;color:#111">B:TD07 &nbsp; E:11/26</span>
+  <span style="position:absolute;left:0;top:10.9mm;width:50mm">
+    <span style="position:relative;display:block;width:50mm;height:7.5mm"><span style="position:absolute;left:2.00mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:3.50mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:4.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:5.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:6.25mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:7.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:8.25mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:8.75mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:9.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:10.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:11.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:12.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:14.25mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:15.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:16.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:18.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:19.50mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:20.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:22.25mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:23.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:24.50mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:25.50mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:27.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:28.75mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:29.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:31.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:32.50mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:33.75mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:35.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:36.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:37.25mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:38.75mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:39.25mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:40.50mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:42.00mm;top:0;width:0.75mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:43.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:44.00mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:45.00mm;top:0;width:0.25mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:45.75mm;top:0;width:1.00mm;height:7.5mm;background:#000"></span><span style="position:absolute;left:47.00mm;top:0;width:0.50mm;height:7.5mm;background:#000"></span></span>
+  </span>
+  <span style="position:absolute;left:0;right:0;top:18.8mm;text-align:center;
+               font-size:5.6pt;letter-spacing:.6px;font-family:Courier,monospace">8901234567900</span>
+  <span style="position:absolute;left:1.5mm;bottom:0.6mm;font-size:7pt;font-weight:800">₹148.00</span>
+  
+</span>
+        </div>
+      </div>
+      <div class="cb" style="border-top:1px solid #F1F4F8;display:flex;align-items:center;gap:8px">
+        <span class="btn" style="height:28px">Reset</span>
+        <span class="btn" style="height:28px">Nadu-la vai</span>
+        <div style="flex:1"></div>
+        <span class="btn" style="height:28px">PDF</span>
+        <span class="btn p" style="height:28px">Print · Zebra 57mm</span>
+      </div>
+    </div>
+
+    <div class="card" style="width:64mm;flex:none;display:flex;flex-direction:column">
+      <div class="ch">Ethana sticker</div>
+      <div class="cb" style="flex:1">
+        <table>
+          <tr><th>Item</th><th style="width:44px;text-align:right">Ethana</th></tr>
+          <tr><td>Idli Rice 25kg<span style="display:block;font-size:9px;color:#8A94A6">8901234567894</span></td><td class="num" style="text-align:right">24</td></tr>
+          <tr><td>Toor Dal 1kg<span style="display:block;font-size:9px;color:#8A94A6">8901234567900</span></td><td class="num" style="text-align:right">50</td></tr>
+          <tr><td>Sunflower Oil 1L<span style="display:block;font-size:9px;color:#8A94A6">8901234567917</span></td><td class="num" style="text-align:right">12</td></tr>
+          <tr><td style="color:#B91C1C">Amla Hair Oil<span style="display:block;font-size:9px;color:#B91C1C">Barcode illa</span></td>
+              <td style="text-align:right"><span class="pill" style="background:#FEF2F2;color:#B91C1C">Uruvaakku</span></td></tr>
+        </table>
+        <div style="margin-top:9px;padding-top:9px;border-top:1px solid #F1F4F8;display:flex;justify-content:space-between;font-size:11.5px">
+          <span style="color:#8A94A6">Mottham sticker</span><b class="num">86</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-top:2px">
+          <span style="color:#8A94A6">A4 thaal</span><b class="num">4</b></div>
+        <div class="ok" style="margin-top:9px;font-size:10px">
+          Barcode illaadha item-ukku <b>server</b> uruvaakkum — EAN-13, sari-paarkkapattadhu
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Ore engine, ore PDF. <b>Screen</b> mattum Direction B-ku maarudhu.</div>
+  <div class="pagenum">2 / 4</div>
+</div>
+
+<!-- ══════ 3 · WHOLE SOFTWARE ══════ -->
+<div class="page">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <h2>3 · "Whole software" — epdi ellaa screen-um maarum</h2>
+    <div class="sub" style="margin:0">Oru screen-a oru screen-a maatha vendaam. <b>Rendu file</b> maathinaa <b>29 screen-um</b> maarum.</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+    <div class="card"><div class="ch">Yen adhu saathiyam</div><div class="cb" style="font-size:11.5px;color:#4A5568;line-height:1.75">
+      Ippove namma screen-ellam <b>pagirndha component</b> vechu thaan kattapattadhu —
+      <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">Card</code>,
+      <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">DataTable</code>,
+      <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">Button</code>,
+      <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">Field</code>,
+      <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">PageHeader</code>.
+      Niram-ellam <code style="background:#F1F4F8;padding:1px 5px;border-radius:4px;font-size:10.5px">tokens.css</code>-la
+      <b>oru idathula</b> irukku.<br><br>
+      Adhanaala: <b>tokens.css</b>-la niram, nizhal, radius maathi + <b>index.jsx</b>-la
+      Card/Button/DataTable-ai konjam thirutthinaa — andha component-ai use pannura
+      <b>ellaa screen-um</b> udane maarum.
+    </div></div>
+
+    <div class="card"><div class="ch">Ethana velai — unmaiyaa</div><div class="cb">
+      <table>
+        <tr><th>Enna</th><th style="width:74px">Ethana screen</th><th style="width:60px">Naal</th></tr>
+        <tr><td><b>tokens.css</b> — niram, nizhal, radius, idam</td><td>ellam (29)</td><td>1</td></tr>
+        <tr><td><b>index.jsx</b> — Card, Button, DataTable, Field, pill, avatar</td><td>ellam (29)</td><td>2</td></tr>
+        <tr style="background:#F0FDF4"><td colspan="3" style="color:#166534;font-weight:620">
+          ↑ Indha rendu mudinja, <b>16 screen</b> onnum seiyaama sari aagidum</td></tr>
+        <tr><td>Sale till — pudhu varisai amaippu (page 7)</td><td>1</td><td>2</td></tr>
+        <tr><td>Design system-la illaadha pazhaya screen</td><td>10</td><td>5</td></tr>
+        <tr><td>Barcode designer</td><td>1</td><td>1.5</td></tr>
+        <tr><td>Print designer</td><td>1</td><td>1.5</td></tr>
+        <tr style="background:#FFF8F1"><td colspan="2" style="font-weight:680;color:#C05621">Mottham</td>
+            <td style="font-weight:680;color:#C05621">13</td></tr>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="card" style="margin-top:11px"><div class="ch">Design-system-la illaadha 10 screen — idhu thaan adhiga velai</div>
+    <div class="cb" style="display:flex;gap:9px;flex-wrap:wrap">
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Barcode</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Categories</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Customers</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Stock</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Inward</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Purchase list</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Purchase return</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Settings</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Stock adjustment</span>
+      <span class="pill" style="background:#FEF2F2;color:#B91C1C">Stock updation</span>
+      <div style="flex:1"></div>
+      <span style="font-size:10.5px;color:#8A94A6">Ivai sondha niram, sondha alavu vechirukku — adhanaala thaniyaa maatha vendum</span>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:11px">
+    <div class="card"><div class="ch">Epdi seyyaren</div><div class="cb" style="font-size:11px;color:#4A5568;line-height:1.7">
+      <b>1.</b> tokens.css + index.jsx &mdash; oru naal mudinja, neenga <b>16 screen</b> udane paakkalaam<br>
+      <b>2.</b> Neenga paarthu "sari" sonnaa thaan meedhi<br>
+      <b>3.</b> Oru oru screen-a — ovvondrum mudincha typecheck + browser-la ottipaarthal<br>
+      <b>4.</b> Palaya velai <b>edhuvum</b> udaiyakoodadhu
+    </div></div>
+
+    <div class="card"><div class="ch">Maaraadhadhu</div><div class="cb">
+      <div class="ck"><div class="box on"></div><div>Ellaa API, ellaa logic</div></div>
+      <div class="ck"><div class="box on"></div><div>Database, palaya bill</div></div>
+      <div class="ck"><div class="box on"></div><div>Barcode / print <b>engine</b></div></div>
+      <div class="ck"><div class="box on"></div><div>Keyboard UX (F1, Enter, focus)</div></div>
+      <div class="ck"><div class="box on"></div><div>Sticker veliya varra vidham</div></div>
+    </div></div>
+
+    <div class="card" style="background:#1F2937;color:#E7EDF5;border:0">
+      <div class="ch" style="border-color:#FFFFFF14">Naan kekkiradhu</div>
+      <div class="cb" style="font-size:11.5px;line-height:1.85">
+        <b style="color:#F7941D">"tokens-la aarambi"</b><br>
+        <span style="color:#9FB0C4">Oru naal velai. Apuram 16 screen-ai neenga browser-la paakkalaam.
+        Pidichaa meedhi, illaina niruthidalaam.</span><br><br>
+        <span style="color:#9FB0C4">Idhu thaan <b style="color:#E7EDF5">kammi aabathu</b> vazhi —
+        13 naal velai mudinja apuram "pidikkala" nu solradhukku badhila,
+        <b style="color:#E7EDF5">oru naal</b> kazhichu theriyum.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">29 screen · 13 naal · mudhal naal mudincha 16 screen theriyum</div>
+  <div class="pagenum">3 / 4</div>
+</div>
+
+<!-- ══════ 4 · ORDER ══════ -->
+<div class="page">
+  <h2>4 · Vari vari-ya</h2>
+  <div class="sub">Ovvoru padi mudinjadhum neenga paakkalaam. Pidikkalanaa angeye niruthidalaam.</div>
+
+  <div class="card" style="margin-top:10px">
+    <table>
+      <tr><th style="width:30px">#</th><th>Enna seiven</th><th style="width:96px">Neenga paakkiradhu</th>
+          <th style="width:52px">Naal</th><th style="width:74px">Aabathu</th></tr>
+      <tr><td><b>1</b></td><td><b>tokens.css</b> — Direction B-oda niram, nizhal, radius, idam</td>
+          <td>16 screen udane</td><td>1</td><td><span class="pill" style="background:#ECFDF5;color:#047857">Kammi</span></td></tr>
+      <tr><td><b>2</b></td><td><b>index.jsx</b> — Card, Button, DataTable, Field + pudhu pill, avatar</td>
+          <td>Adhe 16, innum nalla</td><td>2</td><td><span class="pill" style="background:#ECFDF5;color:#047857">Kammi</span></td></tr>
+      <tr style="background:#FFF8F1"><td colspan="5" style="color:#C05621;font-weight:620">
+        ↑ Inga niruthi neenga paarunga. Sari-nnaa thodarven.</td></tr>
+      <tr><td><b>3</b></td><td><b>Sale till</b> — pudhu varisai amaippu, periya total</td>
+          <td>POS screen</td><td>2</td><td><span class="pill" style="background:#FFF7E6;color:#B45309">Nadu</span></td></tr>
+      <tr><td><b>4</b></td><td><b>Barcode designer</b> — chip, live preview</td>
+          <td>Barcode screen</td><td>1.5</td><td><span class="pill" style="background:#ECFDF5;color:#047857">Kammi</span></td></tr>
+      <tr><td><b>5</b></td><td><b>Print designer</b> — checkbox + live preview</td>
+          <td>Print screen</td><td>1.5</td><td><span class="pill" style="background:#ECFDF5;color:#047857">Kammi</span></td></tr>
+      <tr><td><b>6</b></td><td><b>Pazhaya 10 screen</b> — design system-ukku kondu varradhu</td>
+          <td>10 screen</td><td>5</td><td><span class="pill" style="background:#FFF7E6;color:#B45309">Nadu</span></td></tr>
+    </table>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px">
+    <div class="card"><div class="ch">Ovvoru padi-lum naan seiyaradhu</div><div class="cb">
+      <div class="ck"><div class="box on"></div><div>Oru padi mattum — rendu serthu illa</div></div>
+      <div class="ck"><div class="box on"></div><div>Typecheck (client + server)</div></div>
+      <div class="ck"><div class="box on"></div><div>Browser-la <b>ovvoru screen-aiyum</b> thirandhu ottiparthal</div></div>
+      <div class="ck"><div class="box on"></div><div>Palaya screen ellam velai seiyudhaanu paarppadhu</div></div>
+      <div class="ck"><div class="box on"></div><div>Test data azhippadhu</div></div>
+      <div class="ck"><div class="box on"></div><div>Enna paarthen-nu <b>unmaiyaa</b> solradhu</div></div>
+    </div></div>
+
+    <div class="card" style="background:#FFF8F1;border-color:#FBD38D">
+      <div class="ch" style="border-color:#FBD38D">Sollunga</div>
+      <div class="cb" style="font-size:12px;line-height:2">
+        <b style="color:#C05621">"tokens-la aarambi"</b> &nbsp;<span style="color:#718096">— padi 1</span><br>
+        <b style="color:#C05621">"1 + 2 serthu pannu"</b> &nbsp;<span style="color:#718096">— moonu naal, apuram paakkalaam</span><br>
+        <b style="color:#C05621">"barcode first"</b> &nbsp;<span style="color:#718096">— vari maathikkalaam</span><br>
+        <div style="margin-top:9px;padding-top:9px;border-top:1px solid #FBD38D;font-size:11px;color:#718096">
+          B-la edhaavadhu maathanum-naa ippove sollunga —
+          "ezhuthu innum periyadhaa", "nizhal kammi", "pill vendaam".
+          Tokens-la pona apuram maathradhu kashtam illa, aana <b style="color:#4A5568">mundhi solradhu nalladhu</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Neenga sollaama code onnum thodamaatten</div>
+  <div class="pagenum">4 / 4</div>
+</div>
+
+</body></html>

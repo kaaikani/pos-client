@@ -2,11 +2,11 @@ import { gql } from '../queries/gql.js';
 
 /**
  * Invoice data layer — the ONLY source of truth for the printed tax invoice is
- * the persisted backend sale (PharmaSale + its itemsJson tax snapshot) plus the
+ * the persisted backend sale (PosSale + its itemsJson tax snapshot) plus the
  * active PosCompany (seller identity). Nothing here recomputes tax; it only
  * reads backend values and sums per-line amounts for the totals band.
  *
- * Note: SALE_FIELDS in pharma.query.js omits the GST-compliance columns, so this
+ * Note: SALE_FIELDS in pos.query.js omits the GST-compliance columns, so this
  * module uses its own field set that includes customerGstin / placeOfSupply /
  * invoiceType / reverseCharge / roundOff and the full itemsJson.
  */
@@ -25,16 +25,16 @@ export class InvoiceSaleQuery {
     async execute({ saleId, billNo }) {
         if (saleId) {
             const data = await gql(
-                `query InvoiceSale($id: ID!) { pharmaSale(id: $id) { ${INVOICE_SALE_FIELDS} } }`,
+                `query InvoiceSale($id: ID!) { posSale(id: $id) { ${INVOICE_SALE_FIELDS} } }`,
                 { useAdmin: true, variables: { id: String(saleId) } },
             );
-            return data.pharmaSale || null;
+            return data.posSale || null;
         }
         const data = await gql(
-            `query InvoiceSaleByBill($b: String!) { pharmaSaleByBillNo(billNo: $b) { ${INVOICE_SALE_FIELDS} } }`,
+            `query InvoiceSaleByBill($b: String!) { posSaleByBillNo(billNo: $b) { ${INVOICE_SALE_FIELDS} } }`,
             { useAdmin: true, variables: { b: String(billNo) } },
         );
-        return data.pharmaSaleByBillNo || null;
+        return data.posSaleByBillNo || null;
     }
 }
 

@@ -13,7 +13,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Package, Receipt, Users, Truck, CornerDownLeft } from 'lucide-react';
-import { ListItemsQuery, ListSalesQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery, ListSalesQuery } from '../../core/queries/pos.query';
 import { LedgerPartiesQuery } from '../../core/queries/ledger.query';
 
 const cx = (...a) => a.filter(Boolean).join(' ');

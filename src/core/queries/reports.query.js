@@ -4,7 +4,7 @@ import { gql } from './gql';
  * Frontend query classes for the SERVER-AGGREGATED report endpoints.
  *
  * These deliberately call the backend's pre-aggregated report queries
- * (pharmaSalesReport, purchaseReport, pharmaCurrentStock, expenseReport,
+ * (posSalesReport, purchaseReport, posCurrentStock, expenseReport,
  * dayBook) rather than raw lists. All totals/tax/groupings are computed
  * server-side — the frontend only renders them. This is the audit-safe path:
  * the number shown in the table and the PDF is the number the server produced.
@@ -14,7 +14,7 @@ export class SalesReportQuery {
     async execute(fromDate, toDate) {
         const data = await gql(
             `query SalesReport($f: String, $t: String) {
-                pharmaSalesReport(fromDate: $f, toDate: $t) {
+                posSalesReport(fromDate: $f, toDate: $t) {
                     fromDate toDate billCount totalAmount
                     cashTotal upiTotal cardTotal chequeTotal onlineTotal
                     creditTotal balanceDueTotal discountTotal taxTotal
@@ -28,7 +28,7 @@ export class SalesReportQuery {
             }`,
             { useAdmin: true, variables: { f: fromDate || null, t: toDate || null } },
         );
-        return data.pharmaSalesReport;
+        return data.posSalesReport;
     }
 }
 
@@ -51,14 +51,14 @@ export class StockReportQuery {
     async execute(opts = {}) {
         const data = await gql(
             `query StockReport($low: Boolean, $tracked: Boolean) {
-                pharmaCurrentStock(onlyLowStock: $low, onlyStockBased: $tracked) {
+                posCurrentStock(onlyLowStock: $low, onlyStockBased: $tracked) {
                     itemCount lowStockCount stockTrackedCount totalStockUnits
                     rows { code itemName unit salesRate mrpRate currentStock minStock maxStock isStockBased isLowStock }
                 }
             }`,
             { useAdmin: true, variables: { low: !!opts.onlyLowStock, tracked: !!opts.onlyStockBased } },
         );
-        return data.pharmaCurrentStock;
+        return data.posCurrentStock;
     }
 }
 

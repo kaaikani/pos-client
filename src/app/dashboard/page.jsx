@@ -22,6 +22,17 @@ import InwardModule from './inward-module';
 import PurchaseListModule from './purchase-list-module';
 import { RateMasterModule, SizeMasterModule, BrandMasterModule, BrandwiseRateUpdateModule, CategorywiseRateUpdateModule, SalesManModule } from './master-modules';
 import TaxMasterModule from './tax-master-module';
+import AccountsModule from './accounts-module';
+import PrintTemplateModule from './print-template-module';
+import BusinessSetupModule from './business-setup-module';
+import { BusinessConfigProvider } from '../../components/pos';
+import NumberingSettingsModule from './numbering-settings-module';
+import BatchesModule from './batches-module';
+import ChargesModule from './charges-module';
+import RestaurantModule from './restaurant-module';
+import CreditLimitsModule from './credit-limits-module';
+import RepackModule from './repack-module';
+import UnitSettingsModule from './unit-settings-module';
 import { PosListUsersQuery, PosCreateUserCommand, PosUpdateUserCommand, PosDeleteUserCommand } from '../../core/queries/auth.query';
 import { canOpenScreen, roleLabel } from '../../components/pos/permissions';
 import QuickCreate from '../../components/pos/quick-create';
@@ -514,6 +525,16 @@ export default function VendureDashboard() {
                 case 'inward': return can('inward') ? <InwardModule /> : <NoAccess screen="inward" />;
                 case 'purchase-list': return can('purchase-list') ? <PurchaseListModule /> : <NoAccess screen="purchase-list" />;
                 case 'tax-master': return can('tax-master') ? <TaxMasterModule /> : <NoAccess screen="tax-master" />;
+                case 'business-setup': return can('business-setup') ? <BusinessSetupModule /> : <NoAccess screen="business-setup" />;
+                case 'print-templates': return can('print-templates') ? <PrintTemplateModule /> : <NoAccess screen="print-templates" />;
+                case 'accounts': return can('accounts') ? <AccountsModule /> : <NoAccess screen="accounts" />;
+                case 'numbering-settings': return can('numbering-settings') ? <NumberingSettingsModule /> : <NoAccess screen="numbering-settings" />;
+                case 'repack': return can('repack') ? <RepackModule /> : <NoAccess screen="repack" />;
+                case 'batches': return can('batches') ? <BatchesModule /> : <NoAccess screen="batches" />;
+                case 'charges': return can('charges') ? <ChargesModule /> : <NoAccess screen="charges" />;
+                case 'restaurant': return can('restaurant') ? <RestaurantModule /> : <NoAccess screen="restaurant" />;
+                case 'credit-limits': return can('credit-limits') ? <CreditLimitsModule /> : <NoAccess screen="credit-limits" />;
+                case 'unit-settings': return can('unit-settings') ? <UnitSettingsModule /> : <NoAccess screen="unit-settings" />;
                 case 'rate-master': return can('rate-master') ? <RateMasterModule /> : <NoAccess screen="rate-master" />;
                 case 'size-master': return can('size-master') ? <SizeMasterModule /> : <NoAccess screen="size-master" />;
                 case 'brand-master': return can('brand-master') ? <BrandMasterModule /> : <NoAccess screen="brand-master" />;
@@ -617,6 +638,9 @@ export default function VendureDashboard() {
     const sidebarCollapsed = isPosOpen && !sidebarHover;
 
     return (
+    // Every screen below can ask whether a module is on, so a pharmacy never
+    // renders a table plan and a restaurant never renders batch and expiry.
+    <BusinessConfigProvider>
     <div className="flex h-screen font-sans select-none bg-slate-100 overflow-hidden relative">
 
       {/* Invisible left-edge hover zone — wakes the sidebar when collapsed on Sales page */}
@@ -681,5 +705,6 @@ export default function VendureDashboard() {
           was nowhere in the app for a user to change their own password. */}
       {accountOpen && <AccountPanel session={session} onClose={() => setAccountOpen(false)} />}
     </div>
+    </BusinessConfigProvider>
     );
 }

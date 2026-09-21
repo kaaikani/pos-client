@@ -164,7 +164,11 @@ export function SearchSelect({ value, onChange, options, placeholder = 'Select',
  * Full-page form overlay — Zoho opens "New Item" this way: title left, X right,
  * the form scrolling between, Save / Cancel pinned to the bottom.
  */
-export function FormOverlay({ title, onClose, children, footer }) {
+/**
+ * A ref lands on the scrolling body, not the outer frame, so `useFormFlow`
+ * sees the fields and not the close button or the footer.
+ */
+export const FormOverlay = React.forwardRef(function FormOverlay({ title, onClose, children, footer }, ref) {
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
         window.addEventListener('keydown', onKey);
@@ -180,11 +184,11 @@ export function FormOverlay({ title, onClose, children, footer }) {
                     <X size={20} />
                 </button>
             </header>
-            <div className="pos-scroll flex-1 min-h-0 px-6 py-4">{children}</div>
+            <div ref={ref} className="pos-scroll flex-1 min-h-0 px-6 py-4">{children}</div>
             <footer className="shrink-0 flex items-center gap-2 px-6 py-3 border-t border-[var(--pos-line)]">{footer}</footer>
         </div>
     );
-}
+});
 
 /** Rule between form blocks. */
 export function FormDivider() {

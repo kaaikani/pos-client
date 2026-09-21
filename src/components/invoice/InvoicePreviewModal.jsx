@@ -5,6 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { InvoiceSaleQuery, buildInvoiceModel } from '../../core/invoice/invoice-data';
 import { PosActiveCompanyQuery } from '../../core/queries/company.query';
 import { openInvoicePdf, saveInvoicePdf, printInvoicePdf } from '../../core/invoice/invoice-pdf';
+import { PosPrintTemplateQuery } from '../../core/queries/pos.query';
+import { buildPrintContext } from '../../core/print/template-render';
+import {
+    openTemplatePdf, saveTemplatePdf, printTemplatePdf, templatePdfBase64,
+} from '../../core/print/template-print';
+import { amountInWords } from '../../core/invoice/invoice-data';
+import { qzIsAvailable, qzListPrinters, qzPrintPdfBase64 } from '../../core/barcode/qz-print';
 
 const money = (v) => '₹' + (Number(v) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -27,6 +34,18 @@ export default function InvoicePreviewModal({ open, onOpenChange, saleId, billNo
     const [inv, setInv] = useState(null);
     const [busy, setBusy] = useState('');
     const [size, setSize] = useState(sizeMode);
+
+    /**
+     * The shop's own layout for this paper size, and the printer to send it to.
+     *
+     * The layout is fetched rather than built here: the same template drives the
+     * designer's preview, so the bill a customer receives is the one the shop
+     * laid out, not a second version living in this file.
+     */
+    const [template, setTemplate] = useState(null);
+    const [printers, setPrinters] = useState([]);
+    const [printer, setPrinter] = useState('');
+    const [directReady, setDirectReady] = useState(false);
 
     useEffect(() => { setSize(sizeMode); }, [sizeMode]);
 
@@ -53,12 +72,97 @@ export default function InvoicePreviewModal({ open, onOpenChange, saleId, billNo
         if (!open) { setInv(null); setError(''); }
     }, [open, load]);
 
+    /* The selector speaks in '3inch'; templates are keyed by paper code. */
+    const paperCode = ({
+        '3inch': '3IN', '4inch': '4IN', '6inch': '6IN',
+        A6: 'A6', A5: 'A5', A4: 'A4',
+    })[size] || '3IN';
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        new PosPrintTemplateQuery().execute('SALE', paperCode)
+            .then(t => { if (!cancelled) setTemplate(t); })
+            // No template is not an error the cashier can act on — the old
+            // built-in layout still prints, so fall back quietly.
+            .catch(() => { if (!cancelled) setTemplate(null); });
+        return () => { cancelled = true; };
+    }, [open, paperCode]);
+
+    /* Direct printing is available only when QZ Tray is actually running. */
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const ok = await qzIsAvailable();
+                if (cancelled) return;
+                setDirectReady(!!ok);
+                if (!ok) return;
+                const list = await qzListPrinters();
+                if (cancelled) return;
+                setPrinters(list || []);
+                const saved = localStorage.getItem('pos_bill_printer') || '';
+                if (saved && (list || []).includes(saved)) setPrinter(saved);
+            } catch {
+                if (!cancelled) setDirectReady(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [open]);
+
+    const choosePrinter = (name) => {
+        setPrinter(name);
+        // Remembered per machine, not per company: the printer on this counter
+        // is nothing to do with the printer at the next one.
+        try { localStorage.setItem('pos_bill_printer', name); } catch { /* private window */ }
+    };
+
+    /** Sale plus company, in the shape a template reads. */
+    const printContext = () => buildPrintContext(inv, {
+        title: inv?.isTaxInvoice ? 'TAX INVOICE' : 'BILL OF SUPPLY',
+        amountInWords: amountInWords(inv?.totals?.grandTotal || 0),
+    });
+
+    /**
+     * Uses the shop's template when one exists, and the original built-in
+     * layout when it does not — so a shop that has never opened the designer
+     * still gets a bill.
+     */
     const runPdf = async (fn, tag) => {
         if (!inv) return;
         setBusy(tag);
-        try { await fn(inv, size); }
-        catch (e) { setError(e?.message || 'PDF generation failed.'); }
-        finally { setBusy(''); }
+        try {
+            if (template) {
+                const byTag = { open: openTemplatePdf, save: saveTemplatePdf, print: printTemplatePdf };
+                await byTag[tag](template, printContext());
+            } else {
+                await fn(inv, size);
+            }
+        } catch (e) {
+            setError(e?.message || 'PDF generation failed.');
+        } finally {
+            setBusy('');
+        }
+    };
+
+    /**
+     * Sends the bill straight to the printer, with no Windows dialog.
+     *
+     * This is the difference between a counter that can bill continuously and
+     * one where the cashier clicks through a dialog on every sale.
+     */
+    const printDirect = async () => {
+        if (!inv || !template || !printer) return;
+        setBusy('direct');
+        try {
+            const b64 = await templatePdfBase64(template, printContext());
+            await qzPrintPdfBase64(printer, b64);
+        } catch (e) {
+            setError(e?.message || 'Direct printing failed. Check that QZ Tray is running.');
+        } finally {
+            setBusy('');
+        }
     };
 
     const t = inv?.totals;
@@ -164,7 +268,22 @@ export default function InvoicePreviewModal({ open, onOpenChange, saleId, billNo
                     </label>
                     <button onClick={() => runPdf(openInvoicePdf, 'open')} disabled={!inv || !!busy} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2">{busy === 'open' ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Open PDF</button>
                     <button onClick={() => runPdf(saveInvoicePdf, 'save')} disabled={!inv || !!busy} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2">{busy === 'save' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Save PDF</button>
-                    <button onClick={() => runPdf(printInvoicePdf, 'print')} disabled={!inv || !!busy} className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-500 disabled:opacity-50 flex items-center gap-2">{busy === 'print' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} Print</button>
+                    {directReady && (
+                        <select value={printer} onChange={(e) => choosePrinter(e.target.value)}
+                            title="Printer for direct printing, remembered on this machine"
+                            className="px-2 py-1.5 border border-slate-300 rounded-md text-sm font-bold outline-none max-w-[190px]">
+                            <option value="">Choose printer…</option>
+                            {printers.map((p) => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                    )}
+                    <button onClick={() => runPdf(printInvoicePdf, 'print')} disabled={!inv || !!busy} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2">{busy === 'print' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} Print dialog</button>
+                    {directReady && (
+                        <button onClick={printDirect} disabled={!inv || !template || !printer || !!busy}
+                            title={!printer ? 'Choose a printer first' : 'Print without the Windows dialog'}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-500 disabled:opacity-50 flex items-center gap-2">
+                            {busy === 'direct' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} Print now
+                        </button>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

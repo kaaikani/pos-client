@@ -1,4 +1,5 @@
 import { resolveFieldText, isBarcodeField, isQrField, resolveQrText } from './label-fields.js';
+import { getPdfMake } from '../print/pdfmake';
 import { renderBarcodeSvg, renderQrSvg } from './barcode-render.js';
 import { DEFAULT_OUTER, DEFAULT_INNER } from './label-templates.js';
 
@@ -38,20 +39,7 @@ function estLines(text, boxWpt, fontSizePt) {
     return Math.max(1, lines);
 }
 
-let _pdfMakePromise = null;
-async function getPdfMake() {
-    if (!_pdfMakePromise) {
-        _pdfMakePromise = (async () => {
-            const pdfMakeMod = await import('pdfmake/build/pdfmake');
-            const pdfFontsMod = await import('pdfmake/build/vfs_fonts');
-            const pdfMake = pdfMakeMod.default || pdfMakeMod;
-            const vfs = pdfFontsMod.vfs || pdfFontsMod.default?.vfs || pdfFontsMod.pdfMake?.vfs || pdfFontsMod.default?.pdfMake?.vfs;
-            if (vfs) pdfMake.vfs = vfs;
-            return pdfMake;
-        })();
-    }
-    return _pdfMakePromise;
-}
+
 
 export function expandLabels(queue, company) {
     const out = [];
@@ -125,10 +113,19 @@ function fieldNodes(template, ctx, oxPt, oyPt, svgCache) {
 
 export function buildLabelDoc(template, labels) {
     const W = template.size.widthMm * MM, H = template.size.heightMm * MM;
-    const perRow = Math.max(1, template.layout.perRow || 1);
-    const perCol = Math.max(1, template.layout.perColumn || 1);
-    const gapX = (template.layout.gapXmm || 0) * MM, gapY = (template.layout.gapYmm || 0) * MM;
-    const outer = template.layout.outer || DEFAULT_OUTER;
+
+    /*
+     * On a roll the page is the sticker. One per page, no grid, no outer
+     * margin — the printer's gap sensor finds the next label, and any margin
+     * we add here is margin the sticker does not have, which walks every
+     * field off the edge.
+     */
+    const roll = template.output !== 'SHEET';
+    const perRow = roll ? 1 : Math.max(1, template.layout.perRow || 1);
+    const perCol = roll ? 1 : Math.max(1, template.layout.perColumn || 1);
+    const gapX = roll ? 0 : (template.layout.gapXmm || 0) * MM;
+    const gapY = roll ? 0 : (template.layout.gapYmm || 0) * MM;
+    const outer = roll ? { top: 0, left: 0, right: 0, bottom: 0 } : (template.layout.outer || DEFAULT_OUTER);
     const oL = outer.left * MM, oR = outer.right * MM, oT = outer.top * MM, oB = outer.bottom * MM;
 
     const pageWidth = oL + oR + perRow * W + (perRow - 1) * gapX;
@@ -160,9 +157,11 @@ async function createLabelPdf(template, labels) {
 export async function getLabelPdfBase64(template, labels) {
     const pdf = await createLabelPdf(template, labels);
     return new Promise((resolve, reject) => {
-        try { pdf.getBase64((data) => resolve(data)); } catch (e) { reject(e); }
+        try { Promise.resolve(pdf.getBase64()).then(resolve, reject); } catch (e) { reject(e); }
     });
 }
-export async function openLabelPdf(template, labels) { (await createLabelPdf(template, labels)).open(); }
-export async function saveLabelPdf(template, labels) { (await createLabelPdf(template, labels)).download(`labels-${template.name || 'sheet'}.pdf`); }
-export async function printLabelPdf(template, labels) { (await createLabelPdf(template, labels)).print(); }
+/* Awaited: in pdfmake 0.3 these return promises, and an un-awaited failure
+   would tell the operator the labels printed when nothing reached the printer. */
+export async function openLabelPdf(template, labels) { await (await createLabelPdf(template, labels)).open(); }
+export async function saveLabelPdf(template, labels) { await (await createLabelPdf(template, labels)).download(`labels-${template.name || 'sheet'}.pdf`); }
+export async function printLabelPdf(template, labels) { await (await createLabelPdf(template, labels)).print(); }

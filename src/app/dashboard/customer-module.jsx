@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { usePageFocus } from '../../components/pos';
 import { Search, User, Phone, Mail, MapPin, Plus, Download, RefreshCw, X, Pencil } from 'lucide-react';
 import { gql } from '../../core/queries/gql';
 
@@ -31,6 +32,9 @@ async function fetchCustomers(term) {
 }
 
 export default function CustomerModule() {
+    // Open the screen and type — this screen exists to find one customer.
+    const searchRef = usePageFocus();
+
     const [search, setSearch] = useState('');
     const [customers, setCustomers] = useState([]);
     const [total, setTotal] = useState(0);
@@ -214,6 +218,7 @@ export default function CustomerModule() {
                 <div className="relative max-w-md">
                     <Search className="absolute left-3 top-2.5 text-slate-500" size={16}/>
                     <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                        ref={searchRef}
                         placeholder="Search name, phone, email..."
                         className="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none"/>
                     {search && (

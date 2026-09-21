@@ -1,0 +1,1120 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>UI Proposal</title>
+<style>
+:root{
+  --canvas:#F7FAFC; --surface:#FFFFFF; --sunk:#EDF2F7; --hover:#EDF2F7;
+  --line:#E2E8F0; --line-soft:#EDF2F7; --line-hover:#CBD5E0;
+  --ink:#2D3748; --ink2:#4A5568; --ink3:#718096; --muted:#A0AEC0;
+  --nav:#FFFFFF; --nav-line:#E2E8F0; --nav-ink:#4A5568; --nav-ink2:#718096;
+  --nav-active:#1A202C; --nav-active-bg:#E2E8F0; --nav-rail:#4A5568;
+  --accent:#DD6B20; --accent-solid:#C05621; --accent-line:#FBD38D; --accent-soft:#FFFAF0;
+  --ok:#276749; --ok-soft:#E6FFFA; --warn:#975A16; --warn-soft:#FEFCBF;
+  --danger:#9B2C2C; --danger-soft:#FFF5F5; --info:#2C5282; --info-soft:#EBF8FF;
+  --r:6px; --r-lg:8px;
+  --shadow:0 1px 2px rgba(45,55,72,.04);
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  color:var(--ink); background:#8A94A6; font-size:12px; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.page{
+  width:297mm; height:210mm; background:var(--canvas); margin:0 auto 6mm;
+  padding:9mm 10mm; page-break-after:always; position:relative; overflow:hidden;
+}
+.page:last-child{page-break-after:auto}
+@page{size:A4 landscape; margin:0}
+@media print{ body{background:#fff} .page{margin:0} }
+
+h1{font-size:26px; font-weight:650; letter-spacing:-.4px}
+h2{font-size:17px; font-weight:650; letter-spacing:-.2px}
+.sub{color:var(--ink3); font-size:12.5px; margin-top:3px}
+.kicker{font-size:9.5px; font-weight:700; letter-spacing:1.2px; color:var(--ink3); text-transform:uppercase}
+.pagenum{position:absolute; right:10mm; bottom:6mm; font-size:9.5px; color:var(--muted)}
+.foot{position:absolute; left:10mm; bottom:6mm; font-size:9.5px; color:var(--ink3)}
+
+/* ---------- generic chrome ---------- */
+.app{display:flex; border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
+.rail{width:150px; background:var(--nav); border-right:1px solid var(--nav-line); padding:8px 0; flex:none}
+.rail .grp{font-size:8.5px; font-weight:700; letter-spacing:.9px; color:var(--nav-ink2); padding:9px 12px 4px; text-transform:uppercase}
+.rail a{display:flex; align-items:center; gap:7px; padding:6px 12px; color:var(--nav-ink); font-size:11.5px; text-decoration:none; position:relative}
+.rail a.on{background:var(--nav-active-bg); color:var(--nav-active); font-weight:600}
+.rail a.on:before{content:""; position:absolute; left:0; top:4px; bottom:4px; width:3px; background:var(--nav-rail); border-radius:0 2px 2px 0}
+.dot{width:13px; height:13px; border-radius:3px; background:var(--line); flex:none}
+.rail a.on .dot{background:var(--nav-rail)}
+
+.body{flex:1; min-width:0; display:flex; flex-direction:column}
+.hdr{height:46px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; padding:0 14px; flex:none}
+.hdr .t{font-size:15px; font-weight:650}
+.spacer{flex:1}
+.search{height:26px; border:1px solid var(--line); border-radius:var(--r); background:var(--sunk); width:190px; display:flex; align-items:center; padding:0 9px; color:var(--ink3); font-size:11px; gap:6px}
+.ring{box-shadow:0 0 0 2px var(--accent-line); border-color:var(--accent)!important; background:#fff!important; color:var(--ink)!important}
+.btn{height:26px; padding:0 11px; border-radius:var(--r); border:1px solid var(--line); background:var(--surface); font-size:11px; font-weight:600; color:var(--ink2); display:inline-flex; align-items:center; gap:5px}
+.btn.primary{background:var(--accent-solid); border-color:var(--accent-solid); color:#fff}
+.content{flex:1; padding:12px 14px; background:var(--canvas); min-height:0}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow)}
+.card .ch{padding:9px 12px; border-bottom:1px solid var(--line-soft); font-size:12px; font-weight:650}
+.card .cb{padding:10px 12px}
+.cols3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px}
+.cols2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.sect{font-size:9px; font-weight:700; letter-spacing:.9px; color:var(--ink3); text-transform:uppercase; padding-bottom:5px; border-bottom:1px solid var(--line-soft); margin-bottom:7px}
+
+/* checkbox + switch */
+.ck{display:flex; align-items:flex-start; gap:7px; padding:3.5px 0; font-size:11.5px; color:var(--ink2)}
+.box{width:13px; height:13px; border-radius:3px; border:1.5px solid var(--line-hover); flex:none; margin-top:1px; background:#fff}
+.box.on{background:var(--ink2); border-color:var(--ink2); position:relative}
+.box.on:after{content:""; position:absolute; left:3.5px; top:1px; width:3.5px; height:7px; border:solid #fff; border-width:0 1.8px 1.8px 0; transform:rotate(45deg)}
+.ck .h{color:var(--ink3); font-size:10px; display:block; margin-top:1px}
+.sw{display:inline-block; width:28px; height:16px; border-radius:9px; background:var(--line-hover); flex:none; position:relative}
+.sw:after{content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff}
+.sw.on{background:var(--ok)}
+.sw.on:after{left:14px}
+
+.badge{font-size:9px; font-weight:700; letter-spacing:.4px; padding:2px 6px; border-radius:4px; text-transform:uppercase}
+.b-ok{background:var(--ok-soft); color:var(--ok)}
+.b-warn{background:var(--warn-soft); color:var(--warn)}
+.b-new{background:var(--info-soft); color:var(--info)}
+.b-off{background:var(--sunk); color:var(--ink3)}
+
+table{width:100%; border-collapse:collapse; font-size:11px}
+th{text-align:left; font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:var(--ink3); font-weight:700; padding:6px 8px; background:var(--sunk); border-bottom:1px solid var(--line)}
+td{padding:6px 8px; border-bottom:1px solid var(--line-soft); color:var(--ink2)}
+td.r,th.r{text-align:right}
+.inp{height:23px; border:1px solid var(--line); border-radius:4px; background:#fff; font-size:10.5px; color:var(--ink2); display:inline-flex; align-items:center; padding:0 7px}
+
+.note{background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:var(--r); padding:8px 10px; font-size:11px; color:var(--ink2)}
+.note b{color:var(--accent-solid)}
+.callout{position:absolute; background:#1A202C; color:#fff; font-size:9.5px; font-weight:600; padding:3px 7px; border-radius:4px; line-height:1.35}
+.callout:after{content:""; position:absolute; width:0; height:0}
+
+/* paper preview */
+.paper{background:#fff; border:1px solid var(--line); box-shadow:0 2px 10px rgba(45,55,72,.12); font-family:"Consolas",ui-monospace,monospace; font-size:8px; color:#111; padding:8px 9px; line-height:1.5}
+.paper .c{text-align:center}
+.paper .rowl{display:flex; justify-content:space-between}
+.dash{border-top:1px dashed #999; margin:3px 0}
+.tight td{padding:3.2px 8px; font-size:10.5px}
+.dense .ck{padding:0.9px 0; font-size:10.8px}
+.dense .sect{padding-bottom:2px; margin-bottom:4px; font-size:8.5px}
+.dense .ck .h{font-size:9.5px; margin-top:0}
+.dense .box{width:12px; height:12px}
+.dense .box.on:after{left:3.2px; top:1px; height:6px}
+.tight th{padding:4px 8px}
+.tight .badge{font-size:8.5px; padding:1px 5px}
+</style>
+</head>
+<body>
+
+<!-- ══════════ 1 · COVER ══════════ -->
+<div class="page">
+  <div style="display:flex; flex-direction:column; height:100%">
+    <div class="kicker">AVS Ecom Hub · POS / ERP</div>
+    <h1 style="margin-top:6px">UI Proposal — what the screens will look like</h1>
+    <div class="sub" style="max-width:185mm">
+      Idhu oru <b>mockup</b>. Code onnum maathala. Neenga paathu confirm panna apuram thaan
+      naan code touch panren. Ovvoru page-lum <b>ippo enna irukku</b> and <b>enna aagum</b> nu irukku.
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px">
+      <div class="card"><div class="ch">Idhula irukkiradhu</div><div class="cb">
+        <table>
+          <tr><td style="width:24px">2</td><td><b>Settings</b> — 6 screen onnaaga</td></tr>
+          <tr><td>3</td><td><b>Documents</b> — ovvoru document-um oru switch</td></tr>
+          <tr><td>4</td><td><b>Print Design</b> — checkbox list + live preview</td></tr>
+          <tr><td>5</td><td><b>Print Design</b> — drag mode (ippo irukkiradhu)</td></tr>
+          <tr><td>6</td><td>Before / After + enna code maarum</td></tr>
+        </table>
+      </div></div>
+
+      <div class="card"><div class="ch">Mukkiyamana mooanu vishayam</div><div class="cb">
+        <div class="ck"><div class="box on"></div><div>Vyapar-ai <b>copy pannala</b>. Namma design tokens, namma type scale.
+          Idea mattum edukkapattadhu.<span class="h">Accent colour oru screen-ku oru primary button-ku mattum.</span></div></div>
+        <div class="ck"><div class="box on"></div><div>Sales page, POS till — <b>onnum thodala</b>.
+          <span class="h">Indha proposal Settings + Print Design mattum.</span></div></div>
+        <div class="ck"><div class="box on"></div><div>Print field-ellam <b>already server-la irukku</b> — 108 field.
+          <span class="h">Pudhusa edhuvum add panna vendaam; kaatra vidham mattum maarudhu.</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="note" style="margin-top:14px">
+      <b>Confirm pannunga:</b> page 2, 3, 4 — moonum sari-nnaa "ellam sari" nu sollunga.
+      Oru page mattum venaam-naa "page 4 venaam" nu sollunga. Naan adha vidiruven.
+    </div>
+
+    <div class="spacer"></div>
+    <div style="display:flex; gap:10px; font-size:10.5px; color:var(--ink3)">
+      <div>Mockup · code maathala</div><div>·</div><div>Light theme kaattapattadhu; dark-um velai seiyum</div>
+    </div>
+  </div>
+  <div class="foot">ui-proposal</div><div class="pagenum">1 / 9</div>
+</div>
+
+<!-- ══════════ 2 · SETTINGS ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>2 · Settings — 6 screen onnaaga</h2>
+    <div class="sub" style="margin:0">Ippo: Business Setup, Settings, Numbering, Units &amp; Scale, Tax Master, Print Design — <b>thani thani</b>. Edhuvum engeyum irukkunu theriyaadhu.</div>
+  </div>
+
+  <div class="app" style="margin-top:9px; height:158mm">
+    <div class="rail">
+      <div class="grp">Settings</div>
+      <a><span class="dot"></span>General</a>
+      <a class="on"><span class="dot"></span>Transactions</a>
+      <a><span class="dot"></span>Documents</a>
+      <a><span class="dot"></span>Print</a>
+      <a><span class="dot"></span>Taxes &amp; GST</a>
+      <a><span class="dot"></span>Party</a>
+      <a><span class="dot"></span>Item &amp; Stock</a>
+      <a><span class="dot"></span>Numbering</a>
+      <a><span class="dot"></span>Units &amp; Scale</a>
+      <a><span class="dot"></span>Accounting</a>
+      <a><span class="dot"></span>Users &amp; Roles</a>
+      <div class="grp" style="margin-top:6px">Business</div>
+      <a><span class="dot"></span>Business type</a>
+    </div>
+
+    <div class="body">
+      <div class="hdr">
+        <div class="t">Transactions</div>
+        <div class="spacer"></div>
+        <div class="search ring">Setting thedunga…</div>
+        <div class="btn">Reset</div>
+      </div>
+
+      <div class="content">
+        <div class="cols3" style="height:100%">
+
+          <div class="card"><div class="cb">
+            <div class="sect">Bill header</div>
+            <div class="ck"><div class="box on"></div><div>Invoice / Bill number</div></div>
+            <div class="ck"><div class="box"></div><div>Time on transactions</div></div>
+            <div class="ck"><div class="box on"></div><div>Cash sale by default</div></div>
+            <div class="ck"><div class="box"></div><div>Billing name of party<span class="h">Vera per-la bill venum-naa</span></div></div>
+            <div class="ck"><div class="box"></div><div>Customer P.O. details</div></div>
+            <div class="ck"><div class="box"></div><div>E-way bill number</div></div>
+            <div class="ck"><div class="box on"></div><div>Due date &amp; payment terms</div></div>
+
+            <div class="sect" style="margin-top:12px">Sale screen</div>
+            <div class="ck"><div class="box on"></div><div>Quick entry</div></div>
+            <div class="ck"><div class="box"></div><div>Bill preview kaatta vendaam</div></div>
+            <div class="ck"><div class="box"></div><div>Profit kaattu bill podhu<span class="h">Cashier-ku theriyakoodadhu-naa off</span></div></div>
+            <div class="ck"><div class="box on"></div><div>Wholesale rate toggle</div></div>
+            <div class="ck"><div class="box on"></div><div>Terms &amp; conditions</div></div>
+          </div></div>
+
+          <div class="card"><div class="cb">
+            <div class="sect">Item table</div>
+            <div class="ck"><div class="box on"></div><div>Inclusive / exclusive tax on rate</div></div>
+            <div class="ck"><div class="box on"></div><div>Purchase price kaattu</div></div>
+            <div class="ck"><div class="box on"></div><div>Kadaisi 5 sale rate</div></div>
+            <div class="ck"><div class="box on"></div><div>Kadaisi 5 purchase rate</div></div>
+            <div class="ck"><div class="box on"></div><div>Free quantity</div></div>
+            <div class="ck"><div class="box on"></div><div>Batch number<span class="h">Batch tracking on-la irundhaa mattum</span></div></div>
+            <div class="ck"><div class="box on"></div><div>Expiry date</div></div>
+            <div class="ck"><div class="box"></div><div>Serial number</div></div>
+
+            <div class="sect" style="margin-top:12px">Extra charges</div>
+            <div class="ck"><div class="box on"></div><div>Transport / packing / delivery
+              <span class="h">Kadai per vechu potta charges — Charges screen-la</span></div></div>
+            <div class="ck"><div class="box on"></div><div>Transportation details</div></div>
+            <div class="ck"><div class="box"></div><div>Discount during payment</div></div>
+          </div></div>
+
+          <div class="card"><div class="cb">
+            <div class="sect">Tax, discount &amp; total</div>
+            <div class="ck"><div class="box on"></div><div>Bill-wise tax</div></div>
+            <div class="ck"><div class="box on"></div><div>Bill-wise discount</div></div>
+            <div class="ck"><div class="box on"></div><div>Round off total</div></div>
+            <div style="display:flex; gap:7px; padding:5px 0 0 20px">
+              <span class="inp">Nearest</span><span style="color:var(--ink3); align-self:center">to</span><span class="inp">1</span>
+            </div>
+
+            <div class="sect" style="margin-top:12px">Billing type</div>
+            <div class="ck"><div class="box"></div><div>Lite — item, qty, rate mattum</div></div>
+            <div class="ck"><div class="box on"></div><div>Full — GST, batch, discount ellam</div></div>
+
+            <div class="sect" style="margin-top:12px">Stock</div>
+            <div class="ck"><div class="box on"></div><div>Negative stock-la sale nirutthu</div></div>
+            <div class="ck"><div class="box"></div><div>Bill-la irundhu pudhu item</div></div>
+            <div class="ck"><div class="box"></div><div>Bill-la irundhu pudhu party</div></div>
+
+            <div class="note" style="margin-top:12px; font-size:10.5px">
+              <b>Search box</b> thaan mukkiyam. 80+ setting irukku —
+              "batch" nu adikka, edhu edhu batch-ku sambandham-o adhu mattum kaattum.
+            </div>
+          </div></div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Palaya 6 screen-um indha rail-la tab-a varum. Logic onnum maaraadhu — edhuvum idam maarudhu, adhu mattum.</div>
+  <div class="pagenum">2 / 9</div>
+</div>
+
+<!-- ══════════ 3 · DOCUMENTS ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>3 · Documents — ovvoru document-um oru switch</h2>
+    <div class="sub" style="margin:0">Ippo: business type-la <b>fixed list</b>. Off panna mudiyaadhu, prefix maatha mudiyaadhu.</div>
+  </div>
+
+  <div class="app" style="margin-top:9px; height:158mm">
+    <div class="rail">
+      <div class="grp">Settings</div>
+      <a><span class="dot"></span>General</a>
+      <a><span class="dot"></span>Transactions</a>
+      <a class="on"><span class="dot"></span>Documents</a>
+      <a><span class="dot"></span>Print</a>
+      <a><span class="dot"></span>Taxes &amp; GST</a>
+      <a><span class="dot"></span>Party</a>
+      <a><span class="dot"></span>Item &amp; Stock</a>
+      <a><span class="dot"></span>Numbering</a>
+      <a><span class="dot"></span>Units &amp; Scale</a>
+      <a><span class="dot"></span>Accounting</a>
+      <a><span class="dot"></span>Users &amp; Roles</a>
+    </div>
+
+    <div class="body">
+      <div class="hdr">
+        <div class="t">Documents</div>
+        <div class="spacer"></div>
+        <div class="search ring">Document thedunga…</div>
+        <div class="btn primary">Save</div>
+      </div>
+
+      <div class="content">
+        <div class="card tight" style="height:100%; overflow:hidden">
+          <div class="ch" style="display:flex; align-items:center">
+            <div>Indha kadai enna document-ellam use pannudhu</div>
+            <div class="spacer"></div>
+            <div style="font-size:10.5px; color:var(--ink3); font-weight:400">
+              Off panna — menu-la varaadhu, server-um marukkum
+            </div>
+          </div>
+          <table>
+            <tr><th style="width:52px">On</th><th>Document</th><th style="width:86px">Prefix</th>
+                <th style="width:74px">Series</th><th style="width:96px">Nilai</th><th>Enna seyyum</th></tr>
+
+            <tr><td><span class="sw on"></span></td><td><b>Sale / Bill</b></td><td><span class="inp">2026-27/</span></td><td>INV</td>
+                <td><span class="badge b-ok">Ready</span></td><td>Kadai-oda main bill</td></tr>
+            <tr><td><span class="sw on"></span></td><td><b>Purchase Bill</b></td><td><span class="inp">PUR/</span></td><td>PUR</td>
+                <td><span class="badge b-ok">Ready</span></td><td>Supplier-la irundhu vandha sarakku</td></tr>
+            <tr><td><span class="sw on"></span></td><td><b>Receipt</b></td><td><span class="inp">RCP/</span></td><td>RCP</td>
+                <td><span class="badge b-ok">Ready</span></td><td>Customer kaasu kuduthadhu</td></tr>
+            <tr><td><span class="sw on"></span></td><td><b>Payment</b></td><td><span class="inp">PAY/</span></td><td>PAY</td>
+                <td><span class="badge b-ok">Ready</span></td><td>Supplier-ku kaasu kuduthadhu</td></tr>
+            <tr><td><span class="sw on"></span></td><td><b>Purchase Return</b></td><td><span class="inp">PRT/</span></td><td>PRT</td>
+                <td><span class="badge b-ok">Ready</span></td><td>Supplier-ku thirupi anuppuradhu</td></tr>
+
+            <tr style="background:var(--info-soft)"><td><span class="sw on"></span></td><td><b>Sales Return</b></td><td><span class="inp">SRT/</span></td><td>SRT</td>
+                <td><span class="badge b-warn">Screen illa</span></td><td>Backend <b>mudinjidhu</b> — screen mattum katta vendum</td></tr>
+            <tr style="background:var(--info-soft)"><td><span class="sw on"></span></td><td><b>Purchase Order</b></td><td><span class="inp">PO/</span></td><td>PO</td>
+                <td><span class="badge b-warn">Screen illa</span></td><td>Backend <b>mudinjidhu</b> — screen mattum katta vendum</td></tr>
+
+            <tr><td><span class="sw on"></span></td><td><b>Quotation / Estimate</b></td><td><span class="inp">EST/</span></td><td>EST</td>
+                <td><span class="badge b-new">Pudhusu</span></td><td>Rate sollura paper. Bill-a maathalaam</td></tr>
+            <tr><td><span class="sw on"></span></td><td><b>Delivery Challan</b></td><td><span class="inp">DC/</span></td><td>DC</td>
+                <td><span class="badge b-new">Pudhusu</span></td><td>Sarakku pogudhu, bill apuram. Stock kuraiyum, ledger illa</td></tr>
+            <tr><td><span class="sw"></span></td><td style="color:var(--ink3)">Goods Receipt (GRN)</td><td><span class="inp" style="color:var(--muted)">GRN/</span></td><td style="color:var(--ink3)">GRN</td>
+                <td><span class="badge b-new">Pudhusu</span></td><td style="color:var(--ink3)">PO-ku ethirana vandhadhu. Off-la irukku</td></tr>
+            <tr><td><span class="sw"></span></td><td style="color:var(--ink3)">Proforma Invoice</td><td><span class="inp" style="color:var(--muted)">PI/</span></td><td style="color:var(--ink3)">PI</td>
+                <td><span class="badge b-new">Pudhusu</span></td><td style="color:var(--ink3)">Off-la irukku</td></tr>
+            <tr><td><span class="sw"></span></td><td style="color:var(--ink3)">Kitchen Ticket (KOT)</td><td><span class="inp" style="color:var(--muted)">KOT/</span></td><td style="color:var(--ink3)">KOT</td>
+                <td><span class="badge b-ok">Ready</span></td><td style="color:var(--ink3)">Restaurant mattum. Ippo off</td></tr>
+          </table>
+
+          <div class="cb" style="border-top:1px solid var(--line-soft); background:var(--canvas)">
+            <div class="cols2">
+              <div class="note" style="font-size:10.5px">
+                <b>Business type</b> ippo oru <b>preset button</b> mattum — "Pharmacy" nu adicha
+                indha switch-gal set aagum. Apuram neenga ovvondrayum maathikalaam.
+                Business type <i>identity</i> illa, oru <i>starting point</i>.
+              </div>
+              <div class="note" style="font-size:10.5px; background:var(--ok-soft); border-color:#9AE6B4">
+                <b>Off panna enna aagum?</b> Menu-la varaadhu, "Create new"-la varaadhu,
+                print template list-la varaadhu, <b>server-um marukkum</b>.
+                Palaya bill-ellam paadhukaappa irukkum — onnum azhiyaadhu.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Pudhu table: <b>pos_document_type</b> — code, per, prefix, series, on/off, screen route.</div>
+  <div class="pagenum">3 / 9</div>
+</div>
+
+<!-- ══════════ 4 · PRINT — CHECKBOX MODE ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>4 · Print Design — "Enna print aaganum"</h2>
+    <div class="sub" style="margin:0">Ippo: "Add block" → dropdown-la thedanum. Field 108 irukku, aana kandupidikka mudiyala.</div>
+  </div>
+
+  <div class="app" style="margin-top:9px; height:158mm">
+    <div class="rail">
+      <div class="grp">Settings</div>
+      <a><span class="dot"></span>General</a>
+      <a><span class="dot"></span>Transactions</a>
+      <a><span class="dot"></span>Documents</a>
+      <a class="on"><span class="dot"></span>Print</a>
+      <a><span class="dot"></span>Taxes &amp; GST</a>
+      <a><span class="dot"></span>Party</a>
+      <a><span class="dot"></span>Item &amp; Stock</a>
+      <a><span class="dot"></span>Numbering</a>
+    </div>
+
+    <div class="body">
+      <div class="hdr">
+        <div class="t">Print Design</div>
+        <span class="inp" style="height:26px">Sale / Bill</span>
+        <div class="spacer"></div>
+        <div class="btn">Test print</div>
+        <div class="btn primary">Save</div>
+      </div>
+
+      <div class="content" style="display:flex; gap:11px; padding-top:10px">
+
+        <!-- left: what to print -->
+        <div class="card dense" style="width:114mm; display:flex; flex-direction:column">
+          <div class="ch" style="display:flex; align-items:center; gap:8px">
+            <span>Enna print aaganum</span>
+            <div class="spacer"></div>
+            <span class="search ring" style="width:118px; height:23px">Field thedunga…</span>
+          </div>
+          <div class="cb" style="flex:1">
+
+            <div style="display:flex; gap:6px; align-items:center; margin-bottom:9px">
+              <span style="font-size:9px; font-weight:700; letter-spacing:.8px; color:var(--ink3)">PAPER</span>
+              <span class="btn" style="height:23px; font-size:10px">2"</span>
+              <span class="btn primary" style="height:23px; font-size:10px">3"</span>
+              <span class="btn" style="height:23px; font-size:10px">4"</span>
+              <span class="btn" style="height:23px; font-size:10px">6"</span>
+              <span class="btn" style="height:23px; font-size:10px">A6</span>
+              <span class="btn" style="height:23px; font-size:10px">A5</span>
+              <span class="btn" style="height:23px; font-size:10px">A4</span>
+            </div>
+
+            <div class="cols2" style="gap:14px">
+              <div>
+                <div class="sect">Kadai vivaram</div>
+                <div class="ck"><div class="box on"></div><div>Kadai per</div></div>
+                <div class="ck"><div class="box on"></div><div>Logo</div></div>
+                <div class="ck"><div class="box on"></div><div>Muhavari</div></div>
+                <div class="ck"><div class="box on"></div><div>Phone</div></div>
+                <div class="ck"><div class="box on"></div><div>GSTIN</div></div>
+                <div class="ck"><div class="box"></div><div>Email</div></div>
+
+                <div class="sect" style="margin-top:11px">Customer</div>
+                <div class="ck"><div class="box on"></div><div>Per</div></div>
+                <div class="ck"><div class="box on"></div><div>Phone</div></div>
+                <div class="ck"><div class="box"></div><div>Muhavari</div></div>
+                <div class="ck"><div class="box on"></div><div>GSTIN</div></div>
+                <div class="ck"><div class="box on"></div><div>Place of supply</div></div>
+
+                <div class="sect" style="margin-top:11px">Item table column</div>
+                <div class="ck"><div class="box on"></div><div>S.No</div></div>
+                <div class="ck"><div class="box on"></div><div>Item per</div></div>
+                <div class="ck"><div class="box on"></div><div>HSN / SAC</div></div>
+                <div class="ck"><div class="box on"></div><div>Qty</div></div>
+                <div class="ck"><div class="box on"></div><div>Unit</div></div>
+                <div class="ck"><div class="box on"></div><div>Rate</div></div>
+                <div class="ck"><div class="box on"></div><div>MRP</div></div>
+                <div class="ck"><div class="box on"></div><div>Amount</div></div>
+              </div>
+
+              <div>
+                <div class="sect">Item — kooduthal</div>
+                <div class="ck"><div class="box on"></div><div>Batch number</div></div>
+                <div class="ck"><div class="box on"></div><div>Expiry date</div></div>
+                <div class="ck"><div class="box"></div><div>Mfg date</div></div>
+                <div class="ck"><div class="box on"></div><div>GST %</div></div>
+                <div class="ck"><div class="box"></div><div>GST amount</div></div>
+                <div class="ck"><div class="box"></div><div>Discount</div></div>
+                <div class="ck"><div class="box"></div><div>Free qty</div></div>
+
+                <div class="sect" style="margin-top:11px">Total &amp; vari</div>
+                <div class="ck"><div class="box on"></div><div>Mottham qty</div></div>
+                <div class="ck"><div class="box on"></div><div>Subtotal</div></div>
+                <div class="ck"><div class="box on"></div><div>Discount</div></div>
+                <div class="ck"><div class="box on"></div><div><b>CGST</b></div></div>
+                <div class="ck"><div class="box on"></div><div><b>SGST</b></div></div>
+                <div class="ck"><div class="box"></div><div>IGST<span class="h">Veliyoor state-naa mattum</span></div></div>
+                <div class="ck"><div class="box on"></div><div>GST summary (rate-wise)</div></div>
+                <div class="ck"><div class="box on"></div><div><b>Grand total</b></div></div>
+                <div class="ck"><div class="box on"></div><div>Vaangiyadhu / Meedhi</div></div>
+                <div class="ck"><div class="box on"></div><div>Party-oda mottha meedhi</div></div>
+                <div class="ck"><div class="box on"></div><div>Roobaai ezhuthil</div></div>
+
+                <div class="sect" style="margin-top:11px">Keezh pakkam</div>
+                <div class="ck"><div class="box on"></div><div>Terms &amp; conditions</div></div>
+                <div class="ck"><div class="box"></div><div>QR / UPI</div></div>
+                <div class="ck"><div class="box on"></div><div>Signature idam</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: live preview -->
+        <div class="card" style="flex:1; display:flex; flex-direction:column">
+          <div class="ch" style="display:flex; align-items:center">
+            <span>Live preview</span><div class="spacer"></div>
+            <span style="font-size:10px; color:var(--ink3); font-weight:400">3 inch · 76mm</span>
+          </div>
+          <div class="cb" style="flex:1; background:var(--sunk); display:flex; justify-content:center; padding-top:11px">
+            <div class="paper" style="width:62mm">
+              <div class="c" style="font-weight:700; font-size:10px">BALAJI STORES</div>
+              <div class="c">18/2, Kovilpappakudi, Madurai</div>
+              <div class="c">Ph: 8428961417</div>
+              <div class="c">GSTIN: 33ABCDE1234F1Z5</div>
+              <div class="dash"></div>
+              <div class="c" style="font-weight:700">TAX INVOICE</div>
+              <div class="rowl"><span>No: 2026-27/0148</span><span>13/09/26</span></div>
+              <div>To: Murugan Stores</div>
+              <div>GSTIN: 33XYZAB5678C1Z2</div>
+              <div>Place of supply: 33-Tamil Nadu</div>
+              <div class="dash"></div>
+              <div class="rowl" style="font-weight:700"><span style="width:44%">Item</span><span style="width:14%">Qty</span><span style="width:20%; text-align:right">Rate</span><span style="width:22%; text-align:right">Amount</span></div>
+              <div class="dash"></div>
+              <div class="rowl"><span style="width:44%">Idli Rice 25kg</span><span style="width:14%">2 Bag</span><span style="width:20%; text-align:right">1,240</span><span style="width:22%; text-align:right">2,480.00</span></div>
+              <div style="color:#555; font-size:7px">HSN 1006 · MRP 1,350 · B: R2411 · Exp 06/27 · GST 5%</div>
+              <div class="rowl"><span style="width:44%">Toor Dal 1kg</span><span style="width:14%">10 Pkt</span><span style="width:20%; text-align:right">148</span><span style="width:22%; text-align:right">1,480.00</span></div>
+              <div style="color:#555; font-size:7px">HSN 0713 · MRP 165 · B: TD07 · Exp 11/26 · GST 5%</div>
+              <div class="dash"></div>
+              <div class="rowl"><span>Qty 12</span><span>Subtotal</span><span>3,960.00</span></div>
+              <div class="rowl"><span></span><span>Discount</span><span>-60.00</span></div>
+              <div class="rowl"><span></span><span>CGST 2.5%</span><span>97.50</span></div>
+              <div class="rowl"><span></span><span>SGST 2.5%</span><span>97.50</span></div>
+              <div class="dash"></div>
+              <div class="rowl" style="font-weight:700; font-size:9px"><span>TOTAL</span><span>4,095.00</span></div>
+              <div class="rowl"><span>Vaangiyadhu</span><span>4,000.00</span></div>
+              <div class="rowl"><span>Meedhi</span><span>95.00</span></div>
+              <div class="dash"></div>
+              <div style="font-size:7px">GST SUMMARY</div>
+              <div class="rowl" style="font-size:7px"><span>5%</span><span>3,900.00</span><span>97.50</span><span>97.50</span></div>
+              <div class="dash"></div>
+              <div style="font-size:7px">Naangaayiratthi thonnooru-anju roobai mattum</div>
+              <div class="c" style="margin-top:4px">Nandri · Meendum varuga</div>
+            </div>
+          </div>
+          <div class="cb" style="border-top:1px solid var(--line-soft)">
+            <div class="note" style="font-size:10.5px">
+              <b>Tick panna udane preview-la maarum.</b> Print pannitu paakka vendaam.
+              Idhu <b>appadiye</b> printer-la varum — vera code illa, ondre thaan.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Field-ellam server-la irukkum <b>108-field catalogue</b>-la irundhu thaan varudhu. Pudhusa edhuvum add pannala.</div>
+  <div class="pagenum">4 / 9</div>
+</div>
+
+<!-- ══════════ 5 · PRINT — DRAG MODE ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>5 · Print Design — "Exact idam" (drag)</h2>
+    <div class="sub" style="margin:0">Idhu <b>ippove irukku</b>. Eduthudala — rendu mode-um oru screen-la, mele oru toggle.</div>
+  </div>
+
+  <div class="app" style="margin-top:9px; height:158mm">
+    <div class="rail">
+      <div class="grp">Settings</div>
+      <a><span class="dot"></span>General</a>
+      <a><span class="dot"></span>Transactions</a>
+      <a><span class="dot"></span>Documents</a>
+      <a class="on"><span class="dot"></span>Print</a>
+      <a><span class="dot"></span>Taxes &amp; GST</a>
+      <a><span class="dot"></span>Party</a>
+      <a><span class="dot"></span>Item &amp; Stock</a>
+      <a><span class="dot"></span>Numbering</a>
+    </div>
+
+    <div class="body">
+      <div class="hdr">
+        <div class="t">Print Design</div>
+        <span class="inp" style="height:26px">Sale / Bill</span>
+        <span class="inp" style="height:26px">A5 · 148 × 210mm</span>
+        <div style="display:flex; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; margin-left:4px">
+          <span class="btn" style="border:0; border-radius:0; height:24px; font-size:10px">Enna print aaganum</span>
+          <span class="btn primary" style="border:0; border-radius:0; height:24px; font-size:10px">Exact idam</span>
+        </div>
+        <div class="spacer"></div>
+        <div class="btn">Test print</div>
+        <div class="btn primary">Save</div>
+      </div>
+
+      <div class="content" style="display:flex; gap:11px; padding-top:10px">
+
+        <div class="card" style="flex:1; display:flex; flex-direction:column">
+          <div class="ch" style="display:flex; align-items:center">
+            <span>A5 thaal — izhuthu vaikkalaam</span><div class="spacer"></div>
+            <span style="font-size:10px; color:var(--ink3); font-weight:400">1mm-ku snap aagum</span>
+          </div>
+          <div class="cb" style="flex:1; background:var(--sunk); display:flex; justify-content:center; padding-top:9px">
+            <div style="width:78mm; height:110mm; background:#fff; border:1px solid var(--line); box-shadow:0 2px 10px rgba(45,55,72,.12); position:relative">
+              <div style="position:absolute; left:4mm; top:3mm; width:40mm; height:5mm; border:1px dashed var(--line-hover); font-size:7px; padding:1px 2px; color:#333">BALAJI STORES</div>
+              <div style="position:absolute; left:4mm; top:9mm; width:44mm; height:4mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:1px 2px; color:#333">18/2, Kovilpappakudi</div>
+              <div style="position:absolute; left:4mm; top:14mm; width:36mm; height:4mm; border:1.5px solid var(--accent); background:var(--accent-soft); font-size:6.5px; padding:1px 2px; color:#333; box-shadow:0 0 0 2px var(--accent-line)">GSTIN: 33ABCDE1234F1Z5</div>
+              <div style="position:absolute; right:4mm; top:3mm; width:26mm; height:4mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:1px 2px; text-align:right; color:#333">No: 2026-27/0148</div>
+              <div style="position:absolute; right:4mm; top:8mm; width:26mm; height:4mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:1px 2px; text-align:right; color:#333">13/09/2026</div>
+              <div style="position:absolute; left:4mm; top:22mm; right:4mm; height:44mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:2px; color:#333">
+                <div style="display:flex; font-weight:700; border-bottom:1px solid #ccc; padding-bottom:1px"><span style="flex:1">Item</span><span style="width:26px">Qty</span><span style="width:30px; text-align:right">Rate</span><span style="width:36px; text-align:right">Amount</span></div>
+                <div style="display:flex; padding-top:2px"><span style="flex:1">Idli Rice 25kg</span><span style="width:26px">2</span><span style="width:30px; text-align:right">1,240</span><span style="width:36px; text-align:right">2,480.00</span></div>
+                <div style="display:flex"><span style="flex:1">Toor Dal 1kg</span><span style="width:26px">10</span><span style="width:30px; text-align:right">148</span><span style="width:36px; text-align:right">1,480.00</span></div>
+                <div style="text-align:center; color:var(--muted); margin-top:14px; font-size:6px">— item table (koodum / kuraiyum) —</div>
+              </div>
+              <div style="position:absolute; right:4mm; top:69mm; width:34mm; height:4mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:1px 2px; text-align:right; color:#333">CGST 97.50</div>
+              <div style="position:absolute; right:4mm; top:74mm; width:34mm; height:4mm; border:1px dashed var(--line-hover); font-size:6.5px; padding:1px 2px; text-align:right; color:#333">SGST 97.50</div>
+              <div style="position:absolute; right:4mm; top:79mm; width:34mm; height:5mm; border:1px dashed var(--line-hover); font-size:8px; font-weight:700; padding:1px 2px; text-align:right; color:#111">TOTAL 4,095.00</div>
+              <div style="position:absolute; left:4mm; top:88mm; width:46mm; height:5mm; border:1px dashed var(--line-hover); font-size:6px; padding:1px 2px; color:#333">Roobaai ezhuthil…</div>
+              <div style="position:absolute; right:6mm; bottom:5mm; width:26mm; height:9mm; border:1px dashed var(--line-hover); font-size:6px; padding:1px 2px; text-align:center; color:#333">Signature</div>
+              <div class="callout" style="left:22mm; top:18.5mm">← izhuthu nagarthunga · 1mm snap</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="width:64mm; display:flex; flex-direction:column">
+          <div class="ch">Thernthedutha field</div>
+          <div class="cb">
+            <div style="font-size:11.5px; font-weight:650; margin-bottom:2px">Company GSTIN</div>
+            <div style="font-size:10px; color:var(--ink3); margin-bottom:9px">company.gstin</div>
+
+            <div class="sect">Idam (mm)</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+              <div><div style="font-size:9px; color:var(--ink3); margin-bottom:2px">X</div><span class="inp" style="width:100%">4</span></div>
+              <div><div style="font-size:9px; color:var(--ink3); margin-bottom:2px">Y</div><span class="inp" style="width:100%">28</span></div>
+              <div><div style="font-size:9px; color:var(--ink3); margin-bottom:2px">Ahalam</div><span class="inp" style="width:100%">68</span></div>
+              <div><div style="font-size:9px; color:var(--ink3); margin-bottom:2px">Uyaram</div><span class="inp" style="width:100%">5</span></div>
+            </div>
+
+            <div class="sect" style="margin-top:11px">Ezhuthu</div>
+            <div style="display:flex; gap:6px; align-items:center; margin-bottom:7px">
+              <span class="inp">8 pt</span>
+              <span class="btn primary" style="height:23px; width:26px; justify-content:center">L</span>
+              <span class="btn" style="height:23px; width:26px; justify-content:center">C</span>
+              <span class="btn" style="height:23px; width:26px; justify-content:center">R</span>
+              <span class="btn" style="height:23px; width:26px; justify-content:center; font-weight:800">B</span>
+            </div>
+            <div><div style="font-size:9px; color:var(--ink3); margin-bottom:2px">Munnaadi ezhuthu</div><span class="inp" style="width:100%">GSTIN: </span></div>
+
+            <div class="sect" style="margin-top:11px">Indha thaal-la</div>
+            <div class="ck"><div class="box on"></div><div>Kaattu</div></div>
+            <div class="ck"><div class="box"></div><div>Kaali-na varisai marai<span class="h">GSTIN illa-naa idam vidaadhu</span></div></div>
+
+            <div class="note" style="margin-top:11px; font-size:10.5px">
+              Thaal-ku thaal <b>thani layout</b>. 3 inch-la maathina A5-la maaraadhu.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Rendu mode-um <b>ore</b> template-ai thaan edit pannudhu. Checkbox = "varuma/varaadha", drag = "engu varum".</div>
+  <div class="pagenum">5 / 9</div>
+</div>
+
+<!-- ══════════ 6 · BEFORE / AFTER ══════════ -->
+<div class="page">
+  <h2>6 · Ippo enna irukku → apuram enna irukkum</h2>
+  <div class="sub" style="margin-top:1px">Code-la enna maarum, enna maaraadhu.</div>
+
+  <div class="card tight" style="margin-top:8px">
+    <table>
+      <tr><th style="width:28%">Vishayam</th><th style="width:30%">Ippo</th><th style="width:30%">Apuram</th><th>Risk</th></tr>
+      <tr><td><b>Settings</b></td><td>6 thani screen</td><td>1 window · 11 tab · search</td><td><span class="badge b-ok">Kammi</span> idam mattum maarudhu</td></tr>
+      <tr><td><b>Setting ennikkai</b></td><td>14 module switch</td><td>~80 switch, group-a</td><td><span class="badge b-warn">Nadu</span> pudhu column-gal</td></tr>
+      <tr><td><b>Documents</b></td><td>Business type-la fixed</td><td>Ovvondrum on/off + prefix</td><td><span class="badge b-warn">Nadu</span> pudhu table</td></tr>
+      <tr><td><b>Business type</b></td><td>System-oda identity</td><td>Oru preset button mattum</td><td><span class="badge b-ok">Kammi</span> code ipove ipdi thaan</td></tr>
+      <tr><td><b>Print — field theriyudha?</b></td><td>Dropdown-la thedanum</td><td>Checkbox list, group-a</td><td><span class="badge b-ok">Kammi</span> UI mattum</td></tr>
+      <tr><td><b>Print — preview</b></td><td>Print pannitu thaan theriyum</td><td>Pakkathula live</td><td><span class="badge b-ok">Kammi</span></td></tr>
+      <tr><td><b>Print — drag</b></td><td>Irukku</td><td>Irukkum (2nd mode)</td><td><span class="badge b-off">Maattam illa</span></td></tr>
+      <tr><td><b>Print field catalogue</b></td><td>108 field, server-la</td><td>Adhe 108</td><td><span class="badge b-off">Maattam illa</span></td></tr>
+      <tr><td><b>Paper size</b></td><td>3/4/6 inch, A6, A5, A4</td><td>Adhe 6</td><td><span class="badge b-off">Maattam illa</span></td></tr>
+      <tr><td><b>Sales Return</b></td><td>Backend ✓ · screen ✗</td><td>Screen katta vendum</td><td><span class="badge b-ok">Kammi</span> backend ready</td></tr>
+      <tr><td><b>Purchase Order</b></td><td>Backend ✓ · screen ✗</td><td>Screen katta vendum</td><td><span class="badge b-ok">Kammi</span> backend ready</td></tr>
+      <tr><td><b>Quotation · Delivery Challan · GRN</b></td><td>Edhuvum illa</td><td>Backend + screen</td><td><span class="badge b-warn">Nadu</span> pudhusa katta vendum</td></tr>
+      <tr style="background:var(--danger-soft)"><td><b>POS / Sale till</b></td><td>—</td><td>—</td><td><span class="badge b-off">Thodave maatten</span></td></tr>
+      <tr style="background:var(--danger-soft)"><td><b>Purchase · Receipt · Payment</b></td><td>—</td><td>—</td><td><span class="badge b-off">Thodave maatten</span></td></tr>
+      <tr style="background:var(--danger-soft)"><td><b>Palaya bill / data</b></td><td>—</td><td>—</td><td><span class="badge b-off">Onnum azhiyaadhu</span></td></tr>
+    </table>
+  </div>
+
+  <div class="cols3 tight" style="margin-top:9px">
+    <div class="card"><div class="ch">Vari vari-ya seyya vendiyadhu</div><div class="cb">
+      <table>
+        <tr><td style="width:18px"><b>1</b></td><td><b>Documents table</b><div style="color:var(--ink3); font-size:10px">Backend mattum. Menu adha padikkum.</div></td></tr>
+        <tr><td><b>2</b></td><td><b>Settings onnaaga</b><div style="color:var(--ink3); font-size:10px">Palaya screen-gal tab-a maarum.</div></td></tr>
+        <tr><td><b>3</b></td><td><b>Print checkbox + preview</b><div style="color:var(--ink3); font-size:10px">Drag mode adhe idathula.</div></td></tr>
+        <tr><td><b>4</b></td><td><b>Sales Return, PO screen</b><div style="color:var(--ink3); font-size:10px">Backend ready.</div></td></tr>
+        <tr><td><b>5</b></td><td><b>Quotation → DC → GRN</b><div style="color:var(--ink3); font-size:10px">Backend + screen.</div></td></tr>
+      </table>
+    </div></div>
+
+    <div class="card"><div class="ch">Ovvoru step-lum naan seyyaradhu</div><div class="cb">
+      <div class="ck"><div class="box on"></div><div>Oru process mattum</div></div>
+      <div class="ck"><div class="box on"></div><div>Typecheck (client + server)</div></div>
+      <div class="ck"><div class="box on"></div><div>Browser-la thirandhu ottiparthal</div></div>
+      <div class="ck"><div class="box on"></div><div>Database-la maarudhaanu paarppadhu</div></div>
+      <div class="ck"><div class="box on"></div><div>Test data azhippadhu</div></div>
+      <div class="ck"><div class="box on"></div><div>Palaya screen-ellam velai seiyudhaanu paarppadhu</div></div>
+    </div></div>
+
+    <div class="card" style="background:var(--accent-soft); border-color:var(--accent-line)">
+      <div class="ch" style="border-color:var(--accent-line)">Neenga sollavendiyadhu</div><div class="cb">
+        <div style="font-size:11px; line-height:1.55">
+          <b>"Ellam sari, 1-la aarambi"</b><br>
+          <span style="color:var(--ink3)">— moonu page-um sari</span><br><br>
+          <b>"Page 4 ipdi venaam, …"</b><br>
+          <span style="color:var(--ink3)">— enna maathanumo sollunga, marupadi mockup panren</span><br><br>
+          <b>"Idhu venaam, vera vazhi"</b><br>
+          <span style="color:var(--ink3)">— vera design yosippen</span>
+        </div>
+        <div class="note" style="margin-top:9px; font-size:10.5px; background:#fff">
+          Neenga sollaama <b>code onnum thodamaatten</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Mockup — code maathala. Confirm panna apuram thaan.</div>
+  <div class="pagenum">6 / 9</div>
+</div>
+
+<!-- ══════════ 7 · OUR SALE PAGE ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>7 · Sale page — namma vazhi</h2>
+    <div class="sub" style="margin:0">Vyapar-la 17 column. Counter-la nikkura aal adha padikka mudiyaadhu. <b>Naalu column + oru siriya varisai</b> — adhe thagaval, padikka mudiyum.</div>
+  </div>
+
+  <div class="app" style="margin-top:9px; height:160mm">
+    <div class="body">
+      <div class="hdr" style="gap:8px">
+        <div class="t">Sale</div>
+        <div style="display:flex; border:1px solid var(--line); border-radius:var(--r); overflow:hidden">
+          <span class="btn primary" style="border:0; border-radius:0; height:24px; font-size:10px">Cash</span>
+          <span class="btn" style="border:0; border-radius:0; height:24px; font-size:10px">Credit</span>
+        </div>
+        <span class="inp" style="height:26px">2026-27/0148</span>
+        <span class="inp" style="height:26px">15/09/2026</span>
+        <div class="spacer"></div>
+        <span class="btn" style="width:26px; padding:0; justify-content:center; background:var(--nav-active-bg); border-color:var(--line-hover); font-size:13px">&#9881;</span>
+      </div>
+
+      <div class="content" style="padding:11px 13px; display:flex; gap:11px">
+
+        <!-- LEFT -->
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:9px">
+
+          <!-- one box does everything -->
+          <div>
+            <div style="height:42px; border:2px solid var(--accent); border-radius:var(--r-lg); background:#fff;
+                        box-shadow:0 0 0 3px var(--accent-line); display:flex; align-items:center; padding:0 13px; gap:9px">
+              <span style="font-size:15px; color:var(--ink3)">&#9906;</span>
+              <span style="font-size:15px; color:var(--ink3)">Barcode adinga, illa item per adinga…</span>
+              <div class="spacer"></div>
+              <span style="font-size:10px; color:var(--ink3)">cursor inga thaan</span>
+            </div>
+            <div style="font-size:9.5px; color:var(--ink3); margin-top:3px; padding-left:2px">
+              Oru box thaan — scan, per, code, kuru per ellame idhula
+            </div>
+          </div>
+
+          <!-- lines -->
+          <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column">
+            <div style="display:flex; align-items:center; padding:5px 10px; border-bottom:1px solid var(--line);
+                        background:var(--sunk); font-size:8.5px; font-weight:700; letter-spacing:.8px; color:var(--ink3)">
+              <span style="width:16px">#</span>
+              <span style="flex:1">ITEM</span>
+              <span style="width:52px; text-align:right">QTY</span>
+              <span style="width:64px; text-align:right">RATE</span>
+              <span style="width:72px; text-align:right">AMOUNT</span>
+              <span style="width:22px; text-align:right; color:var(--accent-solid); font-size:11px">+</span>
+            </div>
+
+            <div style="display:flex; align-items:flex-start; padding:7px 10px; background:var(--accent-soft); border-bottom:1px solid var(--line-soft)">
+              <span style="width:16px; color:var(--ink3); font-size:11px">1</span>
+              <span style="flex:1">
+                <span style="font-size:13.5px; font-weight:600; color:var(--ink)">Idli Rice 25kg</span>
+                <span style="display:block; font-size:9.5px; color:var(--ink3); margin-top:1px">
+                  Batch R2411 · Exp 06/27 · MRP 1,350 · GST 5% · Stock 42 Bag</span>
+              </span>
+              <span style="width:52px; text-align:right; font-size:13.5px; font-weight:600">2 <span style="font-size:9.5px; color:var(--ink3)">Bag</span></span>
+              <span style="width:64px; text-align:right; font-size:13.5px">1,240.00</span>
+              <span style="width:72px; text-align:right; font-size:13.5px; font-weight:650">2,480.00</span>
+              <span style="width:22px"></span>
+            </div>
+
+            <div style="display:flex; align-items:flex-start; padding:7px 10px; border-bottom:1px solid var(--line-soft)">
+              <span style="width:16px; color:var(--ink3); font-size:11px">2</span>
+              <span style="flex:1">
+                <span style="font-size:13.5px; font-weight:600; color:var(--ink)">Toor Dal 1kg</span>
+                <span style="display:block; font-size:9.5px; color:var(--ink3); margin-top:1px">
+                  Batch TD07 · Exp 11/26 · MRP 165 · GST 5% · <span style="color:var(--ok); font-weight:600">1 free</span></span>
+              </span>
+              <span style="width:52px; text-align:right; font-size:13.5px; font-weight:600">10 <span style="font-size:9.5px; color:var(--ink3)">Pkt</span></span>
+              <span style="width:64px; text-align:right; font-size:13.5px">148.00</span>
+              <span style="width:72px; text-align:right; font-size:13.5px; font-weight:650">1,480.00</span>
+              <span style="width:22px"></span>
+            </div>
+
+            <div style="display:flex; align-items:flex-start; padding:7px 10px; border-bottom:1px solid var(--line-soft)">
+              <span style="width:16px; color:var(--ink3); font-size:11px">3</span>
+              <span style="flex:1">
+                <span style="font-size:13.5px; font-weight:600; color:var(--ink)">Sunflower Oil 1L</span>
+                <span style="display:block; font-size:9.5px; color:var(--ink3); margin-top:1px">
+                  Batch SF19 · Exp 03/27 · MRP 168 · GST 5% · <span style="color:var(--warn); font-weight:600">2% disc</span></span>
+              </span>
+              <span style="width:52px; text-align:right; font-size:13.5px; font-weight:600">6 <span style="font-size:9.5px; color:var(--ink3)">Pkt</span></span>
+              <span style="width:64px; text-align:right; font-size:13.5px">152.00</span>
+              <span style="width:72px; text-align:right; font-size:13.5px; font-weight:650">893.76</span>
+              <span style="width:22px"></span>
+            </div>
+
+            <div style="flex:1"></div>
+            <div style="border-top:1px solid var(--line); background:var(--sunk); padding:5px 10px; font-size:10px; color:var(--ink3); display:flex; gap:14px">
+              <span><b style="color:var(--ink2)">3</b> line</span><span><b style="color:var(--ink2)">18</b> qty</span>
+              <div class="spacer"></div><span>Varisai mela &#8593;&#8595; · Enter = thirutha</span>
+            </div>
+          </div>
+
+          <!-- charges -->
+          <div class="card"><div class="cb" style="padding:7px 10px; display:flex; align-items:center; gap:8px">
+            <span style="font-size:9px; font-weight:700; letter-spacing:.8px; color:var(--ink3)">CHARGES</span>
+            <span class="inp" style="height:22px">Delivery &nbsp; 50.00</span>
+            <span class="inp" style="height:22px">Packing &nbsp; 20.00</span>
+            <span class="btn" style="height:22px; font-size:10px">+ Charge</span>
+            <div class="spacer"></div>
+            <span style="font-size:9.5px; color:var(--ink3)">Per neenga vekkiradhu</span>
+          </div></div>
+        </div>
+
+        <!-- RIGHT: the two numbers that matter -->
+        <div style="width:74mm; flex:none; display:flex; flex-direction:column; gap:9px">
+          <div class="card" style="flex:none"><div class="cb" style="padding:8px 11px">
+            <div style="font-size:9px; font-weight:700; letter-spacing:.8px; color:var(--ink3); margin-bottom:4px">CUSTOMER</div>
+            <span class="inp" style="width:100%; height:27px; font-size:12px">Murugan Stores</span>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--ink3); margin-top:4px">
+              <span>Pazhaiya meedhi</span><span style="color:var(--warn); font-weight:650">₹ 8,410</span></div>
+          </div></div>
+
+          <div class="card" style="flex:1"><div class="cb" style="padding:9px 11px; height:100%; display:flex; flex-direction:column">
+            <div style="font-size:11px; color:var(--ink2)">
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0"><span>Subtotal</span><span>4,853.76</span></div>
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0"><span>Discount</span><span>-18.24</span></div>
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0"><span>CGST 2.5%</span><span>120.84</span></div>
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0"><span>SGST 2.5%</span><span>120.84</span></div>
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0"><span>Charges</span><span>70.00</span></div>
+              <div style="display:flex; justify-content:space-between; padding:1.5px 0; color:var(--ink3)"><span>Round off</span><span>-0.20</span></div>
+            </div>
+
+            <div style="margin-top:8px; padding-top:8px; border-top:2px solid var(--ink)">
+              <div style="font-size:9px; font-weight:700; letter-spacing:.9px; color:var(--ink3)">MOTTHAM</div>
+              <div style="font-size:33px; font-weight:700; letter-spacing:-1.2px; line-height:1.05; color:var(--ink)">₹ 5,147</div>
+            </div>
+
+            <div style="margin-top:9px">
+              <div style="font-size:9px; font-weight:700; letter-spacing:.8px; color:var(--ink3); margin-bottom:3px">VAANGIYADHU</div>
+              <div style="height:34px; border:2px solid var(--line-hover); border-radius:var(--r); background:#fff;
+                          display:flex; align-items:center; padding:0 10px; font-size:17px; font-weight:650">5,200</div>
+            </div>
+
+            <div style="margin-top:8px; background:var(--ok-soft); border:1px solid #9AE6B4; border-radius:var(--r); padding:7px 10px">
+              <div style="font-size:9px; font-weight:700; letter-spacing:.8px; color:var(--ok)">MEEDHI KUDUKKA</div>
+              <div style="font-size:23px; font-weight:700; color:var(--ok); line-height:1.15">₹ 53</div>
+            </div>
+
+            <div class="spacer"></div>
+            <div style="display:flex; gap:7px; margin-top:9px">
+              <span class="btn" style="flex:1; height:32px; justify-content:center; font-size:11.5px">Print <span style="color:var(--ink3)">F2</span></span>
+              <span class="btn primary" style="flex:1.4; height:32px; justify-content:center; font-size:12.5px">Save &amp; Print <span style="opacity:.75">F1</span></span>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+      <div style="height:26px; border-top:1px solid var(--line); background:var(--sunk); display:flex; align-items:center;
+                  gap:15px; padding:0 13px; font-size:10px; color:var(--ink3); flex:none">
+        <span><b style="color:var(--ink2)">F1</b> Save</span>
+        <span><b style="color:var(--ink2)">F2</b> Print</span>
+        <span><b style="color:var(--ink2)">F3</b> Discount</span>
+        <span><b style="color:var(--ink2)">F6</b> Customer</span>
+        <span><b style="color:var(--ink2)">F7</b> Hold</span>
+        <span><b style="color:var(--ink2)">F8</b> Held bills</span>
+        <span><b style="color:var(--ink2)">F12</b> Last bills</span>
+        <div class="spacer"></div>
+        <span>Mouse thevaiye illa</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Batch · Exp · MRP · GST · Free · Disc — ellam irukku, <b>item per-oda keezh oru siriya varisai-la</b>. Column-a illa.</div>
+  <div class="pagenum">7 / 9</div>
+</div>
+
+<!-- ══════════ 8 · WHY IT IS BETTER ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>8 · Yen idhu nallaa irukku</h2>
+    <div class="sub" style="margin:0">Vyapar sari illa-nu illa. Namma velai <b>vera</b> — counter-la vega vega-va bill podaradhu.</div>
+  </div>
+
+  <div class="cols2" style="margin-top:10px">
+    <div class="card" style="border-color:var(--line-hover)">
+      <div class="ch" style="background:var(--sunk)">Vyapar vazhi — 17 column</div>
+      <div class="cb" style="padding:9px 11px">
+        <div style="border:1px solid var(--line); border-radius:4px; overflow:hidden; font-size:6.5px">
+          <div style="display:flex; background:var(--sunk); font-weight:700; color:var(--ink3)">
+            <span style="flex:1.6; padding:3px 2px; border-right:1px solid var(--line)">ITEM</span>
+            <span style="flex:1; padding:3px 2px; border-right:1px solid var(--line)">SERIAL</span>
+            <span style="flex:1; padding:3px 2px; border-right:1px solid var(--line)">DESCR</span>
+            <span style="flex:.6; padding:3px 2px; border-right:1px solid var(--line)">CNT</span>
+            <span style="flex:.9; padding:3px 2px; border-right:1px solid var(--line)">BATCH</span>
+            <span style="flex:.9; padding:3px 2px; border-right:1px solid var(--line)">MODEL</span>
+            <span style="flex:.8; padding:3px 2px; border-right:1px solid var(--line)">EXP</span>
+            <span style="flex:.8; padding:3px 2px; border-right:1px solid var(--line)">MFG</span>
+            <span style="flex:.6; padding:3px 2px; border-right:1px solid var(--line)">MRP</span>
+            <span style="flex:.5; padding:3px 2px; border-right:1px solid var(--line)">SZ</span>
+            <span style="flex:.5; padding:3px 2px; border-right:1px solid var(--line)">QTY</span>
+            <span style="flex:.6; padding:3px 2px; border-right:1px solid var(--line)">FREE</span>
+            <span style="flex:.6; padding:3px 2px; border-right:1px solid var(--line)">UNIT</span>
+            <span style="flex:.9; padding:3px 2px; border-right:1px solid var(--line)">RATE</span>
+            <span style="flex:.9; padding:3px 2px; border-right:1px solid var(--line)">DISC</span>
+            <span style="flex:.9; padding:3px 2px; border-right:1px solid var(--line)">TAX</span>
+            <span style="flex:.9; padding:3px 2px">AMT</span>
+          </div>
+          <div style="display:flex; color:var(--ink2)">
+            <span style="flex:1.6; padding:4px 2px; border-right:1px solid var(--line-soft)">Idli Rice…</span>
+            <span style="flex:1; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:1; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.6; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.9; padding:4px 2px; border-right:1px solid var(--line-soft)">R2411</span>
+            <span style="flex:.9; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.8; padding:4px 2px; border-right:1px solid var(--line-soft)">06/27</span>
+            <span style="flex:.8; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.6; padding:4px 2px; border-right:1px solid var(--line-soft)">1350</span>
+            <span style="flex:.5; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.5; padding:4px 2px; border-right:1px solid var(--line-soft)">2</span>
+            <span style="flex:.6; padding:4px 2px; border-right:1px solid var(--line-soft)">0</span>
+            <span style="flex:.6; padding:4px 2px; border-right:1px solid var(--line-soft)">Bag</span>
+            <span style="flex:.9; padding:4px 2px; border-right:1px solid var(--line-soft)">1240</span>
+            <span style="flex:.9; padding:4px 2px; border-right:1px solid var(--line-soft)"></span>
+            <span style="flex:.9; padding:4px 2px; border-right:1px solid var(--line-soft)">5%</span>
+            <span style="flex:.9; padding:4px 2px">2480</span>
+          </div>
+        </div>
+        <div style="margin-top:9px; font-size:11px; color:var(--ink2); line-height:1.65">
+          <div class="ck"><div class="box"></div><div>Ezhu kattam <b>kaali-ya</b> irukku — aana idam pidikkudhu</div></div>
+          <div class="ck"><div class="box"></div><div>Ezhuthu <b>romba siriya</b> — 17 column adakka vendum</div></div>
+          <div class="ck"><div class="box"></div><div>Valadhu pakkam <b>scroll</b> panna vendum</div></div>
+          <div class="ck"><div class="box"></div><div>Mottham <b>keezha mooliyil</b> — counter-la theriyala</div></div>
+          <div class="ck"><div class="box"></div><div>Column venaam-naa <b>Settings-ku</b> ponum</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:var(--accent-line)">
+      <div class="ch" style="background:var(--accent-soft); color:var(--accent-solid)">Namma vazhi — naalu column</div>
+      <div class="cb" style="padding:9px 11px">
+        <div style="border:1px solid var(--line); border-radius:4px; overflow:hidden">
+          <div style="display:flex; background:var(--sunk); font-size:7.5px; font-weight:700; color:var(--ink3); padding:3px 5px">
+            <span style="flex:1">ITEM</span><span style="width:30px; text-align:right">QTY</span>
+            <span style="width:40px; text-align:right">RATE</span><span style="width:44px; text-align:right">AMOUNT</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; padding:5px; background:var(--accent-soft)">
+            <span style="flex:1">
+              <span style="font-size:10px; font-weight:600">Idli Rice 25kg</span>
+              <span style="display:block; font-size:7px; color:var(--ink3)">Batch R2411 · Exp 06/27 · MRP 1,350 · GST 5%</span>
+            </span>
+            <span style="width:30px; text-align:right; font-size:10px; font-weight:600">2</span>
+            <span style="width:40px; text-align:right; font-size:10px">1,240</span>
+            <span style="width:44px; text-align:right; font-size:10px; font-weight:650">2,480.00</span>
+          </div>
+        </div>
+        <div style="margin-top:9px; font-size:11px; color:var(--ink2); line-height:1.65">
+          <div class="ck"><div class="box on"></div><div><b>Adhe thagaval</b> — batch, exp, MRP, GST ellam irukku</div></div>
+          <div class="ck"><div class="box on"></div><div>Ezhuthu <b>periyadhu</b> — thooramindhu padikkalaam</div></div>
+          <div class="ck"><div class="box on"></div><div>Scroll <b>illave illa</b></div></div>
+          <div class="ck"><div class="box on"></div><div>Mottham <b>33px</b> — valadhu pakkam, periyadha</div></div>
+          <div class="ck"><div class="box on"></div><div>Kaali kattam <b>thaane maraiyum</b><span class="h">Batch illaadha item-ku batch kaattaadhu</span></div></div>
+          <div class="ck"><div class="box on"></div><div>Column serkka — grid mele <b>+</b>, Settings vendaam</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols3" style="margin-top:11px">
+    <div class="card"><div class="ch">Mukkiyamana yosanai</div><div class="cb dense" style="font-size:11px; color:var(--ink2); line-height:1.6">
+      Oru item-oda <b>thagaval</b> vera, adha <b>kaattura vidham</b> vera.<br><br>
+      17 thagaval iruntha 17 column venum-nu illa. Mukkiyamanadhu <b>naalu</b> —
+      per, qty, rate, amount. Meedhi <b>oru siriya varisai-la</b> item per-oda keezha.<br><br>
+      Idhu thaan periya kadai POS-ellam seiyura vidham.
+    </div></div>
+
+    <div class="card"><div class="ch">Counter-la nadakkiradhu</div><div class="cb dense">
+      <div class="ck"><div class="box on"></div><div>Kai <b>keyboard-ai vittu pogaadhu</b><span class="h">F-key ellam keezha theriyum</span></div></div>
+      <div class="ck"><div class="box on"></div><div><b>Oru box</b> — scan, per, code ellam adhuleye</div></div>
+      <div class="ck"><div class="box on"></div><div><b>Meedhi kudukka</b> pachaiya, periyadha<span class="h">Cashier padikkiradhu idhu thaan</span></div></div>
+      <div class="ck"><div class="box on"></div><div>Pazhaiya meedhi <b>customer per keezha</b><span class="h">Credit kudukka mundhi theriyanum</span></div></div>
+      <div class="ck"><div class="box on"></div><div>Stock <b>item-oda keezha</b><span class="h">Vera screen-ku pogavendaam</span></div></div>
+    </div></div>
+
+    <div class="card" style="background:var(--accent-soft); border-color:var(--accent-line)">
+      <div class="ch" style="border-color:var(--accent-line)">Naan seyyaadhadhu</div><div class="cb dense" style="font-size:11px; line-height:1.6">
+      <div class="ck"><div class="box on"></div><div>Vyapar-ai <b>nagal</b> pannala</div></div>
+      <div class="ck"><div class="box on"></div><div>Adhoda color, font, icon <b>edhuvum edukkala</b></div></div>
+      <div class="ck"><div class="box on"></div><div>Namma tokens, namma type scale mattum</div></div>
+      <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--accent-line); color:var(--ink2)">
+        Avanga-kitta irundhu edutthadhu <b>oru yosanai mattum</b> —
+        <i>"setting-ai velai nadakkura idathuleye vai"</i>. Adhu sari.
+        Aana <b>epdi kaattanum</b> nu namma mudivu.
+      </div>
+    </div></div>
+  </div>
+
+  <div class="foot">Page 9-la — gear adicha varra drawer.</div>
+  <div class="pagenum">8 / 9</div>
+</div>
+
+<!-- ══════════ 9 · THE GEAR DRAWER ══════════ -->
+<div class="page">
+  <div style="display:flex; align-items:baseline; gap:12px">
+    <h2>9 · Gear adicha — indha page-oda setting mattum</h2>
+    <div class="sub" style="margin:0">Ovvoru screen-lum adhe gear. Thedavendaam, vera screen-ku povavendaam.</div>
+  </div>
+
+  <div style="display:flex; gap:11px; margin-top:8px; height:138mm">
+
+    <div class="app" style="flex:1; height:100%">
+      <div class="body">
+        <div class="hdr" style="gap:8px">
+          <div class="t">Sale</div><span class="inp" style="height:26px">2026-27/0148</span>
+          <div class="spacer"></div>
+          <span class="btn primary" style="width:26px; padding:0; justify-content:center; font-size:13px">&#9881;</span>
+        </div>
+        <div class="content" style="padding:11px 13px; opacity:.45">
+          <div style="height:38px; border:1px solid var(--line); border-radius:var(--r-lg); background:#fff; display:flex; align-items:center; padding:0 12px; color:var(--ink3); font-size:13px">Barcode adinga…</div>
+          <div class="card" style="margin-top:9px">
+            <div style="display:flex; padding:5px 10px; background:var(--sunk); font-size:8.5px; font-weight:700; color:var(--ink3)">
+              <span style="width:16px">#</span><span style="flex:1">ITEM</span>
+              <span style="width:52px; text-align:right">QTY</span><span style="width:60px; text-align:right">RATE</span><span style="width:68px; text-align:right">AMOUNT</span></div>
+            <div style="display:flex; align-items:flex-start; padding:7px 10px">
+              <span style="width:16px; color:var(--ink3); font-size:11px">1</span>
+              <span style="flex:1"><span style="font-size:13px; font-weight:600">Idli Rice 25kg</span>
+                <span style="display:block; font-size:9.5px; color:var(--ink3)">Batch R2411 · Exp 06/27 · MRP 1,350 · GST 5%</span></span>
+              <span style="width:52px; text-align:right; font-size:13px; font-weight:600">2</span>
+              <span style="width:60px; text-align:right; font-size:13px">1,240.00</span>
+              <span style="width:68px; text-align:right; font-size:13px; font-weight:650">2,480.00</span></div>
+            <div style="display:flex; align-items:flex-start; padding:7px 10px; border-top:1px solid var(--line-soft)">
+              <span style="width:16px; color:var(--ink3); font-size:11px">2</span>
+              <span style="flex:1"><span style="font-size:13px; font-weight:600">Toor Dal 1kg</span>
+                <span style="display:block; font-size:9.5px; color:var(--ink3)">Batch TD07 · Exp 11/26 · MRP 165 · GST 5%</span></span>
+              <span style="width:52px; text-align:right; font-size:13px; font-weight:600">10</span>
+              <span style="width:60px; text-align:right; font-size:13px">148.00</span>
+              <span style="width:68px; text-align:right; font-size:13px; font-weight:650">1,480.00</span></div>
+          </div>
+          <div style="margin-top:9px; text-align:right">
+            <div style="font-size:9px; font-weight:700; color:var(--ink3)">MOTTHAM</div>
+            <div style="font-size:27px; font-weight:700; letter-spacing:-1px">₹ 5,147</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="width:82mm; flex:none; display:flex; flex-direction:column; box-shadow:var(--shadow-lg, 0 12px 28px -8px rgba(45,55,72,.22))">
+      <div style="height:40px; display:flex; align-items:center; padding:0 13px; border-bottom:1px solid var(--line)">
+        <div style="font-size:14px; font-weight:650">Sale page settings</div>
+        <div class="spacer"></div><span style="color:var(--ink3); font-size:15px">&times;</span>
+      </div>
+
+      <div class="cb dense" style="flex:1; padding:10px 13px">
+        <div class="sect">Column — grid-la enna theriyanum</div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px">
+          <span class="btn primary" style="height:22px; font-size:10px">Batch &times;</span>
+          <span class="btn primary" style="height:22px; font-size:10px">Expiry &times;</span>
+          <span class="btn primary" style="height:22px; font-size:10px">MRP &times;</span>
+          <span class="btn primary" style="height:22px; font-size:10px">Free qty &times;</span>
+          <span class="btn primary" style="height:22px; font-size:10px">Discount &times;</span>
+          <span class="btn" style="height:22px; font-size:10px; color:var(--ink3)">+ Serial</span>
+          <span class="btn" style="height:22px; font-size:10px; color:var(--ink3)">+ Size</span>
+          <span class="btn" style="height:22px; font-size:10px; color:var(--ink3)">+ Purchase rate</span>
+        </div>
+        <div style="font-size:9.5px; color:var(--ink3); margin-bottom:9px">
+          Adicha udane pin pakkam maarum — izhuthu varisai maathalaam
+        </div>
+
+        <div class="sect">Bill number</div>
+        <div style="display:flex; align-items:center; gap:7px; padding:2px 0 6px">
+          <span class="inp" style="height:23px">2026-27/</span>
+          <span style="font-size:10px; color:var(--ink3)">adutha: 0149</span>
+        </div>
+
+        <div class="sect">Indha page-la</div>
+        <div class="ck"><div class="box on"></div><div style="flex:1">Quick entry</div></div>
+        <div class="ck"><div class="box on"></div><div style="flex:1">Terms &amp; conditions</div></div>
+        <div class="ck"><div class="box on"></div><div style="flex:1">Round off total</div></div>
+        <div class="ck"><div class="box"></div><div style="flex:1">Due date &amp; payment terms</div></div>
+        <div class="ck"><div class="box"></div><div style="flex:1">Wholesale rate toggle</div></div>
+        <div class="ck"><div class="box"></div><div style="flex:1">Purchase rate kaattu
+          <span class="h">Cashier-ku theriyakoodadhu-naa off</span></div></div>
+
+        <div class="sect" style="margin-top:9px">Thodarbudaiyavai</div>
+        <div style="display:flex; align-items:center; padding:3.5px 0; font-size:11px; color:var(--ink2)">
+          <span style="flex:1">Charges — Delivery, Packing</span><span style="color:var(--ink3)">&rsaquo;</span></div>
+        <div style="display:flex; align-items:center; padding:3.5px 0; font-size:11px; color:var(--ink2)">
+          <span style="flex:1">Print template — 3 inch</span><span style="color:var(--ink3)">&rsaquo;</span></div>
+        <div style="display:flex; align-items:center; padding:3.5px 0; font-size:11px; color:var(--ink2)">
+          <span style="flex:1">Credit limit</span><span style="color:var(--ink3)">&rsaquo;</span></div>
+
+        <div class="sect" style="margin-top:7px">Billing type</div>
+        <div class="ck"><div class="box"></div><div style="flex:1">Lite — item, qty, rate mattum</div></div>
+        <div class="ck"><div class="box on"></div><div style="flex:1">Full — ellam</div></div>
+      </div>
+
+      <div style="border-top:1px solid var(--line); padding:9px 13px; text-align:center">
+        <span style="font-size:11.5px; font-weight:650; color:var(--accent-solid)">&#9881;&nbsp; Ella settings-um &rsaquo;</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols3" style="margin-top:5px">
+    <div class="card"><div class="ch">Vyapar-la irundhu vithiyaasam</div><div class="cb dense" style="font-size:11px; line-height:1.6; color:var(--ink2)">
+      Avanga drawer-la <b>neenda checkbox list</b>. Namma drawer-la column-gal <b>chip</b>-a —
+      adicha udane pin pakkam maarum, izhuthu varisai maathalaam.<br><br>
+      Setting-ai <b>padikka</b> vendiyadhilla, <b>paakkalaam</b>.
+    </div></div>
+
+    <div class="card"><div class="ch">Oru idam, rendu vazhi</div><div class="cb dense" style="font-size:11px; line-height:1.6; color:var(--ink2)">
+      Indha drawer-la irukkira ovvondrum <b>page 2-la irukkira ore setting</b> thaan.
+      Rendu idathula kaattapadudhu, <b>ore</b> idathula sethikkapadudhu.<br><br>
+      Keela <b>"Ella settings-um"</b> — periya window, adhe tab thirakkum.
+    </div></div>
+
+    <div class="card" style="background:var(--accent-soft); border-color:var(--accent-line)">
+      <div class="ch" style="border-color:var(--accent-line)">Sollunga</div><div class="cb dense" style="font-size:11px; line-height:1.65">
+      <b>"Sale page sari"</b> — page 7, 9 ok<br>
+      <b>"Column ipdi venaam"</b> — vera vidham yosippen<br>
+      <b>"Innum periya ezhuthu"</b> — size maathiduven<br><br>
+      <span style="color:var(--ink3)">Neenga sollaama code onnum thodamaatten.</span>
+    </div></div>
+  </div>
+
+  <div class="pagenum">9 / 9</div>
+</div>
+
+</body>
+</html>

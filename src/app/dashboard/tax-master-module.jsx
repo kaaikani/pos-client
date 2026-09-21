@@ -18,7 +18,7 @@ import { Percent, RefreshCw, Plus, Pencil, Trash2, Check, X } from 'lucide-react
 import {
     ListTaxMastersQuery, CreateTaxMasterCommand,
     UpdateTaxMasterCommand, DeleteTaxMasterCommand,
-} from '../../core/queries/pharma.query';
+} from '../../core/queries/pos.query';
 import {
     Page, PageHeader, PageBody, HeaderStat, ListToolbar, Button, DataTable,
     Banner, EmptyState, Card, Field, Input, Select, FormGrid, Badge,

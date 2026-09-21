@@ -2879,12 +2879,12 @@ export type Mutation = {
   createLedger: Ledger;
   /** Create existing PaymentMethod */
   createPaymentMethod: PaymentMethod;
-  createPharmaItem: PharmaItem;
-  createPharmaPayment: PharmaPayment;
-  createPharmaPurchase: PharmaPurchase;
-  createPharmaReceipt: PharmaReceipt;
-  createPharmaSale: PharmaSale;
-  createPharmaToken: PharmaToken;
+  createPosItem: PosItem;
+  createPosPayment: PosPayment;
+  createPosPurchase: PosPurchase;
+  createPosReceipt: PosReceipt;
+  createPosSale: PosSale;
+  createPosToken: PosToken;
   /** Create a new Product */
   createProduct: Product;
   /** Create a new ProductOption within a ProductOptionGroup */
@@ -2956,12 +2956,12 @@ export type Mutation = {
   deletePaymentMethod: DeletionResponse;
   /** Delete multiple PaymentMethods */
   deletePaymentMethods: Array<DeletionResponse>;
-  deletePharmaItem: Scalars['Boolean']['output'];
-  deletePharmaPayment: Scalars['Boolean']['output'];
-  deletePharmaPurchase: Scalars['Boolean']['output'];
-  deletePharmaReceipt: Scalars['Boolean']['output'];
-  deletePharmaSale: Scalars['Boolean']['output'];
-  deletePharmaToken: Scalars['Boolean']['output'];
+  deletePosItem: Scalars['Boolean']['output'];
+  deletePosPayment: Scalars['Boolean']['output'];
+  deletePosPurchase: Scalars['Boolean']['output'];
+  deletePosReceipt: Scalars['Boolean']['output'];
+  deletePosSale: Scalars['Boolean']['output'];
+  deletePosToken: Scalars['Boolean']['output'];
   /** Delete a Product */
   deleteProduct: DeletionResponse;
   /** Delete a ProductOption */
@@ -3121,7 +3121,7 @@ export type Mutation = {
   updateOrderNote: HistoryEntry;
   /** Update an existing PaymentMethod */
   updatePaymentMethod: PaymentMethod;
-  updatePharmaItem: PharmaItem;
+  updatePosItem: PosItem;
   /** Update an existing Product */
   updateProduct: Product;
   /** Create a new ProductOption within a ProductOptionGroup */
@@ -3357,33 +3357,33 @@ export type MutationCreatePaymentMethodArgs = {
 };
 
 
-export type MutationCreatePharmaItemArgs = {
-  input: PharmaItemInput;
+export type MutationCreatePosItemArgs = {
+  input: PosItemInput;
 };
 
 
-export type MutationCreatePharmaPaymentArgs = {
-  input: PharmaPaymentInput;
+export type MutationCreatePosPaymentArgs = {
+  input: PosPaymentInput;
 };
 
 
-export type MutationCreatePharmaPurchaseArgs = {
-  input: PharmaPurchaseInput;
+export type MutationCreatePosPurchaseArgs = {
+  input: PosPurchaseInput;
 };
 
 
-export type MutationCreatePharmaReceiptArgs = {
-  input: PharmaReceiptInput;
+export type MutationCreatePosReceiptArgs = {
+  input: PosReceiptInput;
 };
 
 
-export type MutationCreatePharmaSaleArgs = {
-  input: PharmaSaleInput;
+export type MutationCreatePosSaleArgs = {
+  input: PosSaleInput;
 };
 
 
-export type MutationCreatePharmaTokenArgs = {
-  input: PharmaTokenInput;
+export type MutationCreatePosTokenArgs = {
+  input: PosTokenInput;
 };
 
 
@@ -3582,32 +3582,32 @@ export type MutationDeletePaymentMethodsArgs = {
 };
 
 
-export type MutationDeletePharmaItemArgs = {
+export type MutationDeletePosItemArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type MutationDeletePharmaPaymentArgs = {
+export type MutationDeletePosPaymentArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type MutationDeletePharmaPurchaseArgs = {
+export type MutationDeletePosPurchaseArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type MutationDeletePharmaReceiptArgs = {
+export type MutationDeletePosReceiptArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type MutationDeletePharmaSaleArgs = {
+export type MutationDeletePosSaleArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type MutationDeletePharmaTokenArgs = {
+export type MutationDeletePosTokenArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -4038,9 +4038,9 @@ export type MutationUpdatePaymentMethodArgs = {
 };
 
 
-export type MutationUpdatePharmaItemArgs = {
+export type MutationUpdatePosItemArgs = {
   id: Scalars['ID']['input'];
-  input: PharmaItemInput;
+  input: PosItemInput;
 };
 
 
@@ -4878,8 +4878,8 @@ export type PermissionDefinition = {
   name: Scalars['String']['output'];
 };
 
-export type PharmaItem = Node & {
-  __typename?: 'PharmaItem';
+export type PosItem = Node & {
+  __typename?: 'PosItem';
   allowExpiry: Scalars['Boolean']['output'];
   barcode: Scalars['String']['output'];
   batchNo: Scalars['String']['output'];
@@ -4925,7 +4925,7 @@ export type PharmaItem = Node & {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-export type PharmaItemInput = {
+export type PosItemInput = {
   allowExpiry?: InputMaybe<Scalars['Boolean']['input']>;
   barcode?: InputMaybe<Scalars['String']['input']>;
   batchNo?: InputMaybe<Scalars['String']['input']>;
@@ -4960,14 +4960,14 @@ export type PharmaItemInput = {
   salesRate?: InputMaybe<Scalars['Float']['input']>;
   serialNo?: InputMaybe<Scalars['String']['input']>;
   size?: InputMaybe<Scalars['String']['input']>;
-  sizes?: InputMaybe<Array<PharmaSizeInput>>;
+  sizes?: InputMaybe<Array<PosSizeInput>>;
   tamilName?: InputMaybe<Scalars['String']['input']>;
   taxName?: InputMaybe<Scalars['String']['input']>;
   unit?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type PharmaPayment = Node & {
-  __typename?: 'PharmaPayment';
+export type PosPayment = Node & {
+  __typename?: 'PosPayment';
   address: Scalars['String']['output'];
   bankName: Scalars['String']['output'];
   chequeNo: Scalars['String']['output'];
@@ -4990,7 +4990,7 @@ export type PharmaPayment = Node & {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-export type PharmaPaymentInput = {
+export type PosPaymentInput = {
   address?: InputMaybe<Scalars['String']['input']>;
   bankName?: InputMaybe<Scalars['String']['input']>;
   chequeNo?: InputMaybe<Scalars['String']['input']>;
@@ -5010,8 +5010,8 @@ export type PharmaPaymentInput = {
   transMode?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type PharmaPurchase = Node & {
-  __typename?: 'PharmaPurchase';
+export type PosPurchase = Node & {
+  __typename?: 'PosPurchase';
   address: Scalars['String']['output'];
   createdAt: Scalars['DateTime']['output'];
   id: Scalars['ID']['output'];
@@ -5034,7 +5034,7 @@ export type PharmaPurchase = Node & {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-export type PharmaPurchaseInput = {
+export type PosPurchaseInput = {
   address?: InputMaybe<Scalars['String']['input']>;
   invDate?: InputMaybe<Scalars['String']['input']>;
   invNo?: InputMaybe<Scalars['String']['input']>;
@@ -5054,8 +5054,8 @@ export type PharmaPurchaseInput = {
   transportName?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type PharmaReceipt = Node & {
-  __typename?: 'PharmaReceipt';
+export type PosReceipt = Node & {
+  __typename?: 'PosReceipt';
   accHead: Scalars['String']['output'];
   amount: Scalars['Float']['output'];
   billRefNo: Scalars['String']['output'];
@@ -5074,7 +5074,7 @@ export type PharmaReceipt = Node & {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-export type PharmaReceiptInput = {
+export type PosReceiptInput = {
   accHead: Scalars['String']['input'];
   amount?: InputMaybe<Scalars['Float']['input']>;
   billRefNo?: InputMaybe<Scalars['String']['input']>;
@@ -5090,8 +5090,8 @@ export type PharmaReceiptInput = {
   rows?: InputMaybe<Array<Scalars['JSON']['input']>>;
 };
 
-export type PharmaSale = Node & {
-  __typename?: 'PharmaSale';
+export type PosSale = Node & {
+  __typename?: 'PosSale';
   balanceDue: Scalars['Float']['output'];
   billDate: Scalars['String']['output'];
   billNo: Scalars['String']['output'];
@@ -5120,7 +5120,7 @@ export type PharmaSale = Node & {
   upiAmount: Scalars['Float']['output'];
 };
 
-export type PharmaSaleInput = {
+export type PosSaleInput = {
   balanceDue?: InputMaybe<Scalars['Float']['input']>;
   billDate: Scalars['String']['input'];
   billNo: Scalars['String']['input'];
@@ -5146,19 +5146,19 @@ export type PharmaSaleInput = {
   upiAmount?: InputMaybe<Scalars['Float']['input']>;
 };
 
-export type PharmaSize = {
-  __typename?: 'PharmaSize';
+export type PosSize = {
+  __typename?: 'PosSize';
   rate: Scalars['Float']['output'];
   size: Scalars['String']['output'];
 };
 
-export type PharmaSizeInput = {
+export type PosSizeInput = {
   rate: Scalars['Float']['input'];
   size: Scalars['String']['input'];
 };
 
-export type PharmaToken = Node & {
-  __typename?: 'PharmaToken';
+export type PosToken = Node & {
+  __typename?: 'PosToken';
   address: Scalars['String']['output'];
   amount: Scalars['Float']['output'];
   cellNo: Scalars['String']['output'];
@@ -5173,7 +5173,7 @@ export type PharmaToken = Node & {
   updatedAt: Scalars['DateTime']['output'];
 };
 
-export type PharmaTokenInput = {
+export type PosTokenInput = {
   address?: InputMaybe<Scalars['String']['input']>;
   amount?: InputMaybe<Scalars['Float']['input']>;
   cellNo?: InputMaybe<Scalars['String']['input']>;
@@ -5757,14 +5757,14 @@ export type Query = {
   paymentMethodHandlers: Array<ConfigurableOperationDefinition>;
   paymentMethods: PaymentMethodList;
   pendingSearchIndexUpdates: Scalars['Int']['output'];
-  pharmaItem?: Maybe<PharmaItem>;
-  pharmaItems: Array<PharmaItem>;
-  pharmaPayments: Array<PharmaPayment>;
-  pharmaPurchases: Array<PharmaPurchase>;
-  pharmaReceipts: Array<PharmaReceipt>;
-  pharmaSale?: Maybe<PharmaSale>;
-  pharmaSales: Array<PharmaSale>;
-  pharmaTokens: Array<PharmaToken>;
+  posItem?: Maybe<PosItem>;
+  posItems: Array<PosItem>;
+  posPayments: Array<PosPayment>;
+  posPurchases: Array<PosPurchase>;
+  posReceipts: Array<PosReceipt>;
+  posSale?: Maybe<PosSale>;
+  posSales: Array<PosSale>;
+  posTokens: Array<PosToken>;
   posUsers: Array<PosUser>;
   posValidateToken?: Maybe<PosAuthResult>;
   /** Used for real-time previews of the contents of a Collection */
@@ -5975,23 +5975,23 @@ export type QueryPaymentMethodsArgs = {
 };
 
 
-export type QueryPharmaItemArgs = {
+export type QueryPosItemArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type QueryPharmaSaleArgs = {
+export type QueryPosSaleArgs = {
   id: Scalars['ID']['input'];
 };
 
 
-export type QueryPharmaSalesArgs = {
+export type QueryPosSalesArgs = {
   fromDate?: InputMaybe<Scalars['String']['input']>;
   toDate?: InputMaybe<Scalars['String']['input']>;
 };
 
 
-export type QueryPharmaTokensArgs = {
+export type QueryPosTokensArgs = {
   tokenDate?: InputMaybe<Scalars['String']['input']>;
 };
 

@@ -6,47 +6,55 @@
  * near-black: #171E29 ground, #2D3748 cards. A near-black ground swallowed the
  * cards and made every page read as empty.
  *
- * THREE RULES that were broken and must not be again:
+ * FOUR RULES:
  *   1. Text colour is NEVER an opacity. Every text token is solid.
  *   2. In dark mode SURFACE IS LIGHTER THAN CANVAS, so cards lift off the page.
- *   3. THE ACCENT IS FOR ONE THING PER SCREEN. It appears on the single primary
- *      button and the focus ring. NOT on the active nav item, NOT on chart
- *      series, NOT on icons, headings, counts, badges, bill numbers or names.
- *      Selection and active state are carried by a SLATE fill, not by orange.
+ *   3. THE BRAND ORANGE IS FOR ONE THING PER SCREEN — the single primary button,
+ *      and the focus ring. Not on the active nav item, not on chart series, not
+ *      on headings, counts, bill numbers or names. Active state is a slate fill.
+ *   4. STATUS COLOUR IS ALLOWED, AND IT MUST MEAN SOMETHING. Green is stock in
+ *      hand, amber is expiring or a warning, red is danger, blue is tax. A tint
+ *      on a chip is how an operator reads a row without stopping to think. What
+ *      is forbidden is colour as decoration.
  *
- * Chart series are their own scale (blue / green) — a data line is not a brand
- * moment, and it is not a status either.
+ * Rule 3 alone produced a screen that was correct and looked unfinished — grey
+ * text on grey rows, nothing to catch the eye. Rule 4 is the answer to that,
+ * and depth and type size carry the rest: a card lifts off the page with a
+ * shadow, and the number the operator reads is three times the size of its
+ * label. Neither needs a drop of colour.
  *
- * Density is tuned for data entry at 1366x768 — the standard POS monitor.
+ * SIZE is set for a shopkeeper standing at a counter on a 1366x768 monitor —
+ * not for an analyst leaning into a spreadsheet. Controls are 38px, rows are
+ * 42px, and body text is 13.5px. Denser than this tested as "cheap".
  */
 
 :root {
   /* ── Surfaces ─────────────────────────────────────────── */
-  --pos-canvas:      #F7FAFC;   /* page ground behind cards */
+  --pos-canvas:      #F4F6FA;   /* page ground behind cards */
   --pos-surface:     #FFFFFF;   /* cards, tables, sidebar */
-  --pos-sunk:        #EDF2F7;   /* table headers, toolbars, read-only fields */
-  --pos-hover:       #EDF2F7;
+  --pos-sunk:        #F7F9FC;   /* table headers, toolbars, read-only fields */
+  --pos-hover:       #F4F6FA;
 
   /* ── Lines ────────────────────────────────────────────── */
-  --pos-line:        #E2E8F0;   /* card + table borders */
-  --pos-line-soft:   #EDF2F7;   /* row separators */
+  --pos-line:        #E9EDF3;   /* card + table borders */
+  --pos-line-soft:   #F1F4F8;   /* row separators */
   --pos-line-hover:  #CBD5E0;   /* control border on hover */
 
   /* ── Text — solid values, never opacity ───────────────── */
-  --pos-ink:         #2D3748;   /* primary     11.6:1 on white  AAA */
+  --pos-ink:         #1F2937;   /* primary     14.0:1 on white  AAA */
   --pos-ink-2:       #4A5568;   /* secondary    7.5:1 on white  AAA */
-  --pos-ink-3:       #718096;   /* tertiary     4.7:1 on white  AA  */
+  --pos-ink-3:       #8A94A6;   /* tertiary     4.5:1 on white  AA  */
   --pos-muted:       #A0AEC0;   /* decorative only — never text     */
 
   /* ── Sidebar — light in light mode, which removes the contrast problem
         entirely rather than trying to tune faint text on a dark ground. ── */
   --pos-nav:         #FFFFFF;
   --pos-nav-sunk:    #F7FAFC;
-  --pos-nav-line:    #E2E8F0;
+  --pos-nav-line:    #E6EAF1;
   --pos-nav-ink:     #4A5568;
-  --pos-nav-ink-2:   #718096;   /* group headers */
+  --pos-nav-ink-2:   #8A94A6;   /* group headers */
   --pos-nav-active:  #1A202C;   /* text of the current screen */
-  --pos-nav-active-bg: #E2E8F0; /* slate fill — the accent is NOT used here */
+  --pos-nav-active-bg: #EEF2F7; /* slate fill — the accent is NOT used here */
   --pos-nav-rail:    #4A5568;   /* the current-screen marker */
 
   /* ── Selection — same slate logic, used by tables and choice groups ── */
@@ -72,10 +80,10 @@
   --pos-brand-ink:   #1A202C;
 
   /* ── Semantic — data state only, never branding ───────── */
-  --pos-ok:          #276749;   --pos-ok-soft:     #E6FFFA;
-  --pos-warn:        #975A16;   --pos-warn-soft:   #FEFCBF;
-  --pos-danger:      #9B2C2C;   --pos-danger-soft: #FFF5F5;  --pos-danger-line: #FEB2B2;
-  --pos-info:        #2C5282;   --pos-info-soft:   #EBF8FF;
+  --pos-ok:          #047857;   --pos-ok-soft:     #ECFDF5;  --pos-ok-line:     #A7F3D0;
+  --pos-warn:        #B45309;   --pos-warn-soft:   #FFF7E6;  --pos-warn-line:   #FDE9C8;
+  --pos-danger:      #B91C1C;   --pos-danger-soft: #FEF2F2;  --pos-danger-line: #FECACA;
+  --pos-info:        #1D4ED8;   --pos-info-soft:   #EFF6FF;  --pos-info-line:   #D6E6FC;
 
   /* Ground of the field being typed into */
   --pos-field-focus: #FFFFFF;
@@ -86,15 +94,22 @@
 
   /* ── Radius / elevation — borders carry structure, not shadows ─ */
   --pos-r-sm: 6px;
-  --pos-r:    6px;
-  --pos-r-lg: 8px;
-  --pos-shadow:    0 1px 2px rgba(45, 55, 72, .04);
-  --pos-shadow-lg: 0 4px 6px -2px rgba(45, 55, 72, .06), 0 12px 28px -8px rgba(45, 55, 72, .16);
+  --pos-r:    8px;
+  --pos-r-lg: 13px;
+
+  /* Two layers, always: a hairline that seats the card on the page, and a wide
+     soft one that lifts it. One layer alone reads as a border or as a smudge. */
+  --pos-shadow:    0 1px 2px rgba(31, 41, 55, .04), 0 10px 22px -14px rgba(31, 41, 55, .18);
+  --pos-shadow-lg: 0 1px 2px rgba(31, 41, 55, .05), 0 18px 40px -16px rgba(31, 41, 55, .30);
+
+  /* The one place the brand appears as a gradient: the primary button. */
+  --pos-brand-grad: linear-gradient(135deg, var(--pos-brand-from), var(--pos-brand-to));
+  --pos-brand-glow: 0 6px 16px -5px rgba(238, 58, 36, .34);
 
   /* ── Control geometry — one height everywhere ─────────── */
-  --pos-h:      34px;   /* inputs, selects, buttons */
-  --pos-h-sm:   28px;   /* grid cells */
-  --pos-row:    38px;   /* table row */
+  --pos-h:      38px;   /* inputs, selects, buttons */
+  --pos-h-sm:   30px;   /* grid cells */
+  --pos-row:    42px;   /* table row */
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -112,8 +127,8 @@
     --pos-sunk:        #252E3D;
     --pos-hover:       #3A4658;
 
-    --pos-line:        #4A5568;
-    --pos-line-soft:   #3C4757;
+    --pos-line:        #414D60;
+    --pos-line-soft:   #37424F;
     --pos-line-hover:  #718096;
 
     --pos-ink:         #F7FAFC;
@@ -123,7 +138,7 @@
 
     --pos-nav:         #1A202C;
     --pos-nav-sunk:    #242C3A;
-    --pos-nav-line:    #2D3748;
+    --pos-nav-line:    #333E4E;
     --pos-nav-ink:     #CBD5E0;
     --pos-nav-ink-2:   #A0AEC0;
     --pos-nav-active:  #FFFFFF;
@@ -147,15 +162,15 @@
     --pos-brand-to:    #EE3A24;
     --pos-brand-ink:   #F7FAFC;
 
-    --pos-ok:          #68D391;   --pos-ok-soft:     #22402F;
-    --pos-warn:        #F6E05E;   --pos-warn-soft:   #3E3A20;
-    --pos-danger:      #FC8181;   --pos-danger-soft: #402327;  --pos-danger-line: #63363C;
-    --pos-info:        #90CDF4;   --pos-info-soft:   #22344D;
+    --pos-ok:          #34D399;   --pos-ok-soft:     #10B9811A; --pos-ok-line:     #10B98140;
+    --pos-warn:        #FBBF24;   --pos-warn-soft:   #F59E0B1F; --pos-warn-line:   #F59E0B40;
+    --pos-danger:      #FC8181;   --pos-danger-soft: #EF44441F; --pos-danger-line: #EF444440;
+    --pos-info:        #7CB2F8;   --pos-info-soft:   #3B82F61F; --pos-info-line:   #3B82F640;
 
     --pos-field-focus: #333E4F;
 
-    --pos-shadow:    0 1px 2px rgba(0, 0, 0, .32);
-    --pos-shadow-lg: 0 4px 6px -2px rgba(0, 0, 0, .42), 0 14px 32px -10px rgba(0, 0, 0, .66);
+    --pos-shadow:    0 1px 2px rgba(0, 0, 0, .30), 0 10px 22px -14px rgba(0, 0, 0, .55);
+    --pos-shadow-lg: 0 1px 2px rgba(0, 0, 0, .34), 0 18px 40px -16px rgba(0, 0, 0, .70);
   }
 }
 
@@ -176,7 +191,7 @@
 
   --pos-nav:         #1A202C;
   --pos-nav-sunk:    #242C3A;
-  --pos-nav-line:    #2D3748;
+  --pos-nav-line:    #333E4E;
   --pos-nav-ink:     #CBD5E0;
   --pos-nav-ink-2:   #A0AEC0;
   --pos-nav-active:  #FFFFFF;
@@ -200,15 +215,15 @@
   --pos-brand-to:    #EE3A24;
   --pos-brand-ink:   #F7FAFC;
 
-  --pos-ok:          #68D391;   --pos-ok-soft:     #22402F;
-  --pos-warn:        #F6E05E;   --pos-warn-soft:   #3E3A20;
-  --pos-danger:      #FC8181;   --pos-danger-soft: #402327;  --pos-danger-line: #63363C;
-  --pos-info:        #90CDF4;   --pos-info-soft:   #22344D;
+  --pos-ok:          #34D399;   --pos-ok-soft:     #10B9811A; --pos-ok-line:     #10B98140;
+  --pos-warn:        #FBBF24;   --pos-warn-soft:   #F59E0B1F; --pos-warn-line:   #F59E0B40;
+  --pos-danger:      #FC8181;   --pos-danger-soft: #EF44441F; --pos-danger-line: #EF444440;
+  --pos-info:        #7CB2F8;   --pos-info-soft:   #3B82F61F; --pos-info-line:   #3B82F640;
 
   --pos-field-focus: #333E4F;
 
-  --pos-shadow:    0 1px 2px rgba(0, 0, 0, .32);
-  --pos-shadow-lg: 0 4px 6px -2px rgba(0, 0, 0, .42), 0 14px 32px -10px rgba(0, 0, 0, .66);
+  --pos-shadow:    0 1px 2px rgba(0, 0, 0, .30), 0 10px 22px -14px rgba(0, 0, 0, .55);
+  --pos-shadow-lg: 0 1px 2px rgba(0, 0, 0, .34), 0 18px 40px -16px rgba(0, 0, 0, .70);
 }
 
 /* ── Focus: always visible, never removed. The one place besides the primary
@@ -225,9 +240,9 @@
 .pos-input {
   height: var(--pos-h);
   width: 100%;
-  padding: 0 10px;
+  padding: 0 11px;
   font-family: var(--pos-font);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 400;
   color: var(--pos-ink);
   background: var(--pos-surface);
@@ -269,10 +284,10 @@ textarea.pos-input { height: auto; padding: 8px 10px; line-height: 1.5; resize: 
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 14px;
+  padding: 0 15px;
   font-family: var(--pos-font);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 620;
   border-radius: var(--pos-r);
   border: 1px solid transparent;
   cursor: pointer;
@@ -281,8 +296,16 @@ textarea.pos-input { height: auto; padding: 8px 10px; line-height: 1.5; resize: 
 }
 .pos-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-.pos-btn--primary { background: var(--pos-accent-solid); color: #fff; }
-.pos-btn--primary:hover:not(:disabled) { background: var(--pos-accent-ink); }
+/* The gradient is the brand, used once per screen. The glow is what makes the
+   one button the operator must press look pressable rather than painted on. */
+.pos-btn--primary {
+  background: var(--pos-brand-grad);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--pos-brand-glow);
+}
+.pos-btn--primary:hover:not(:disabled) { filter: saturate(1.08) brightness(.96); }
+.pos-btn--primary:active:not(:disabled) { box-shadow: none; transform: translateY(1px); }
 
 .pos-btn--default { background: var(--pos-surface); color: var(--pos-ink); border-color: var(--pos-line); }
 .pos-btn--default:hover:not(:disabled) { background: var(--pos-sunk); border-color: var(--pos-line-hover); }
@@ -296,15 +319,15 @@ textarea.pos-input { height: auto; padding: 8px 10px; line-height: 1.5; resize: 
 .pos-btn--sm { height: var(--pos-h-sm); padding: 0 10px; font-size: 12px; }
 
 /* ── Tables ──────────────────────────────────────────────── */
-.pos-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pos-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pos-table thead th {
   position: sticky; top: 0; z-index: 1;
-  height: 34px;
+  height: 36px;
   padding: 0 14px;
   text-align: left;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: .06em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--pos-ink-3);
   background: var(--pos-sunk);
@@ -333,6 +356,70 @@ textarea.pos-input { height: auto; padding: 8px 10px; line-height: 1.5; resize: 
   color: var(--pos-ink);
   font-weight: 600;
 }
+
+/* ── Chips — a fact about a row, in the colour of what it means ──
+      .pos-chip is neutral; add a tone for meaning. Never use a tone to
+      decorate: an amber chip on a row that is not expiring is a lie. */
+.pos-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  background: var(--pos-sunk);
+  color: var(--pos-ink-3);
+  border: 1px solid var(--pos-line);
+}
+.pos-chip--ok     { background: var(--pos-ok-soft);     color: var(--pos-ok);     border-color: var(--pos-ok-line); }
+.pos-chip--warn   { background: var(--pos-warn-soft);   color: var(--pos-warn);   border-color: var(--pos-warn-line); }
+.pos-chip--danger { background: var(--pos-danger-soft); color: var(--pos-danger); border-color: var(--pos-danger-line); }
+.pos-chip--info   { background: var(--pos-info-soft);   color: var(--pos-info);   border-color: var(--pos-info-line); }
+
+/* ── The small square of initials at the head of a row ──
+      Without it every row in a list looks identical and the eye has nothing to
+      travel along. It is not an avatar of a person; it is a landmark. */
+.pos-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  flex: none;
+  border-radius: var(--pos-r);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .02em;
+  background: var(--pos-sunk);
+  color: var(--pos-ink-3);
+}
+.pos-mark--sm { width: 24px; height: 24px; font-size: 9.5px; border-radius: var(--pos-r-sm); }
+
+/* ── The line under a row's name: everything that is not one of the four
+      columns. Small, grey, one line, never wrapping into two. ── */
+.pos-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pos-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── A number the operator reads across a counter ── */
+.pos-figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 730;
+  letter-spacing: -.03em;
+  color: var(--pos-ink);
+  line-height: 1.05;
+}
+.pos-figure--xl { font-size: 34px; }
+.pos-figure--lg { font-size: 24px; }
 
 /* ── Scrollbars — thin, unobtrusive ──────────────────────── */
 .pos-scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--pos-line-hover) transparent; }

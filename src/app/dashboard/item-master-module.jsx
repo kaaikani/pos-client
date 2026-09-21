@@ -14,11 +14,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Package, Plus, Trash2, RefreshCw, Search, AlertTriangle, MoreVertical } from 'lucide-react';
 import {
     ListItemsQuery, CreateItemCommand, UpdateItemCommand,
-    DeleteItemEverywhereCommand, ListTaxRatesQuery,
-} from '../../core/queries/pharma.query';
+    DeleteItemEverywhereCommand, ListTaxRatesQuery, PosItemUsageQuery,
+    PosUnitsQuery, ItemForTransactionQuery,
+    PosItemPriceTiersQuery, CreatePosItemPriceTierCommand, CancelPosItemPriceTierCommand,
+} from '../../core/queries/pos.query';
 import {
     Page, PageHeader, PageBody, ListToolbar, Button, DataTable, Banner,
-    EmptyState, useConfirm, money, Input, Textarea,
+    EmptyState, useConfirm, money, Input, Textarea, useModule, useFormFlow,
 } from '../../components/pos';
 // Imported from their own files rather than re-exported through index.jsx.
 // A barrel that re-exports sibling modules makes Turbopack rebuild the whole
@@ -38,7 +40,12 @@ const DEFAULT_TAXES = [
     { id: 'gst28', name: 'GST 28%', value: 28 },
 ];
 
-const UNITS = ['PCS', 'NOS', 'BOX', 'DOZEN', 'GRAMS', 'KILOGRAMS', 'LITRE', 'ML', 'METERS', 'PACKET', 'BAG', 'SET', 'TABLETS'];
+/*
+ * The unit list used to be hardcoded here as 'GRAMS', 'KILOGRAMS', 'DOZEN',
+ * 'TABLETS'… none of which are codes in the unit master. An item saved with
+ * unit "KILOGRAMS" has a base unit the server cannot resolve, so every
+ * conversion for it silently does nothing. The list now comes from the master.
+ */
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 /** On-hand stock. `minStock` is the reorder level — never use it as stock. */
@@ -59,6 +66,13 @@ const blankItem = (nextCode) => ({
 
 export default function ItemMasterModule() {
     const confirm = useConfirm();
+
+    // A restaurant has no price lists and a trader has no batch numbers. The
+    // server refuses these anyway; hiding them keeps the form to what this
+    // business actually fills in.
+    const priceListsOn = useModule('priceTiers');
+    const barcodeOn = useModule('barcode');
+    const batchOn = useModule('batchTracking');
     const session = useMemo(() => readSession(), []);
     const perms = session?.permissions;
     const mayCreate = canDo(perms, 'item.create');
@@ -84,18 +98,65 @@ export default function ItemMasterModule() {
 
     const set = useCallback((k, v) => setForm(p => ({ ...p, [k]: v })), []);
 
+    // Enter moves down the form. The Name field keeps the landing focus it
+    // already has, and a field that handles Enter itself (the unit pickers)
+    // is left alone.
+    const flow = useFormFlow(undefined, { autoFocus: false });
+
     /* ── data ───────────────────────────────────────────── */
+
+    const [units, setUnits] = useState([]);
+
+    /**
+     * Units this item may transact in, beyond its base.
+     *
+     * Held as { unitCode, conversionRate } — "how many BASE units in one of
+     * this". The base itself is never in this list; it is added at save time
+     * from the item's Base Unit so exactly one row is ever marked as base.
+     */
+    const [extraUnits, setExtraUnits] = useState([]);
+
+    /**
+     * The price rows for this item: one per (price list x unit), plus optional
+     * quantity breaks.
+     *
+     * Saved separately from the item itself. The item form writes the item and
+     * its units in one call; prices are their own records with their own
+     * server-side validation, and mixing them into the item payload would hide
+     * which of the two failed.
+     */
+    const [tiers, setTiers] = useState([]);
+    const [tierDraft, setTierDraft] = useState(null);
+    const [tierBusy, setTierBusy] = useState(false);
 
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            setItems(await new ListItemsQuery().execute());
+            const [list, unitList] = await Promise.all([
+                new ListItemsQuery().execute(),
+                new PosUnitsQuery().execute().catch(() => []),
+            ]);
+            setItems(list);
+            setUnits(unitList);
         } catch (e) {
             setBanner({ tone: 'danger', text: `Could not load items: ${e.message}` });
         } finally {
             setLoading(false);
         }
     }, []);
+
+    /**
+     * Units offered as an item's base, labelled with what they measure so the
+     * choice is obvious: picking KG rather than PCS is what lets the same item
+     * later be sold in grams.
+     */
+    const unitOptions = useMemo(
+        () => units.map(u => ({
+            value: u.code,
+            label: `${u.code} — ${u.name}${u.kind && u.kind !== 'PACK' ? ' (' + u.kind.toLowerCase() + ')' : ''}`,
+        })),
+        [units],
+    );
 
     useEffect(() => {
         loadAll();
@@ -137,7 +198,27 @@ export default function ItemMasterModule() {
     });
 
     const openEdit = useCallback((it) => {
-        setForm({ ...blankItem(it.code), ...it, type: it.isStockBased ? 'GOODS' : 'SERVICE' });
+        setForm({
+            ...blankItem(it.code), ...it,
+            type: it.isStockBased ? 'GOODS' : 'SERVICE',
+            // An item batch-tracked by an earlier version, or by an import, may
+            // not have the older flag set. Either one means the box is ticked.
+            allowExpiry: !!(it.allowExpiry || it.isBatchTracked),
+        });
+        setExtraUnits([]);
+        setTierDraft(null);
+        new PosItemPriceTiersQuery().execute(it.id)
+            .then(rows => setTiers((rows || []).filter(t => t.status === 'ACTIVE')))
+            .catch(() => setTiers([]));
+        // The item's non-base units come from the server; the row shown in the
+        // list does not carry them.
+        new ItemForTransactionQuery().execute({ code: it.code })
+            .then(found => setExtraUnits(
+                (found?.allowedUnits || [])
+                    .filter(a => !a.isBase)
+                    .map(a => ({ unitCode: a.unitCode, conversionRate: a.conversionRate })),
+            ))
+            .catch(() => { /* an item with no units configured simply has none */ });
         setEditingId(it.id);
         setSalesOn(true);
         setPurchaseOn(num(it.purchaseRate) > 0);
@@ -199,6 +280,9 @@ export default function ItemMasterModule() {
     const openNew = useCallback(() => {
         const next = items.length ? Math.max(...items.map(i => parseInt(i.code, 10) || 0)) + 1 : 1;
         setForm(blankItem(next));
+        setExtraUnits([]);
+        setTiers([]);
+        setTierDraft(null);
         setEditingId(null);
         setSalesOn(true);
         setPurchaseOn(true);
@@ -207,6 +291,68 @@ export default function ItemMasterModule() {
     }, [items]);
 
     const closeForm = useCallback(() => setFormOpen(false), []);
+
+    /**
+     * Adds one price row.
+     *
+     * The server decides whether the row is acceptable — a wholesale price with
+     * neither a unit nor a minimum quantity is refused there, not here, so the
+     * rule holds for the API as well as for this screen.
+     */
+    const addTier = useCallback(async () => {
+        if (!editingId) {
+            setBanner({ tone: 'warn', text: 'Save the item first, then add its prices.' });
+            return;
+        }
+        const d = tierDraft;
+        if (!d || !(num(d.rate) > 0)) {
+            setBanner({ tone: 'warn', text: 'Enter a rate greater than zero.' });
+            return;
+        }
+        setTierBusy(true);
+        try {
+            const created = await new CreatePosItemPriceTierCommand().execute({
+                itemId: Number(editingId),
+                tierType: d.tierType || 'SALE',
+                unitCode: d.unitCode || '',
+                rate: num(d.rate),
+                minQty: num(d.minQty),
+                label: '',
+            });
+            setTiers(prev => [...prev, created]);
+            setTierDraft(null);
+            setBanner(null);
+        } catch (err) {
+            setBanner({ tone: 'danger', text: err.message });
+        } finally {
+            setTierBusy(false);
+        }
+    }, [editingId, tierDraft]);
+
+    const removeTier = useCallback(async (id) => {
+        setTierBusy(true);
+        try {
+            await new CancelPosItemPriceTierCommand().execute(id);
+            setTiers(prev => prev.filter(t => String(t.id) !== String(id)));
+        } catch (err) {
+            setBanner({ tone: 'danger', text: err.message });
+        } finally {
+            setTierBusy(false);
+        }
+    }, []);
+
+    /** Units this item can be priced in: its base plus whatever was added. */
+    const priceUnitOptions = useMemo(() => {
+        const codes = [form.unit, ...extraUnits.map(u => u.unitCode)].filter(Boolean);
+        const seen = new Set();
+        const out = [{ value: '', label: 'Any unit (scaled by conversion)' }];
+        for (const c of codes) {
+            if (seen.has(c)) continue;
+            seen.add(c);
+            out.push({ value: c, label: c === form.unit ? c + ' (base)' : c });
+        }
+        return out;
+    }, [form.unit, extraUnits]);
 
     const handleSave = useCallback(async () => {
         const miss = [];
@@ -230,6 +376,23 @@ export default function ItemMasterModule() {
             barcode: String(form.barcode || ''),
             upcCode: String(form.upcCode || ''),
             unit: String(form.unit || 'NA'),
+            // The server upserts the whole set in one call, so the base unit is
+            // sent alongside the extras. Rates for weight, volume and length are
+            // checked against the unit master and a contradicting one is refused.
+            ...(form.unit
+                ? {
+                      allowedUnits: [
+                          { unitCode: String(form.unit), conversionRate: 1, isBase: true },
+                          ...extraUnits
+                              .filter(u => u.unitCode && u.unitCode !== form.unit && num(u.conversionRate) > 0)
+                              .map(u => ({
+                                  unitCode: String(u.unitCode),
+                                  conversionRate: num(u.conversionRate),
+                                  isBase: false,
+                              })),
+                      ],
+                  }
+                : {}),
             packingUnit: String(form.packingUnit || ''),
             size: String(form.size || ''),
             taxName: String(form.taxName || 'GST 5%'),
@@ -245,6 +408,12 @@ export default function ItemMasterModule() {
             minStock: num(form.minStock),
             maxStock: num(form.maxStock),
             allowExpiry: !!form.allowExpiry,
+            // The same switch. The label has always promised batch tracking;
+            // until the batch table existed it only revealed three fields on
+            // the item. Sent unconditionally rather than gated on the module,
+            // so that turning batch tracking on later needs no re-editing of
+            // every item — the server requires both before it takes effect.
+            isBatchTracked: !!form.allowExpiry,
             isExpiryEnabled: form.isExpiryEnabled !== false,
             isWeightBased: !!form.isWeightBased,
             // Type radio drives stock tracking: goods are stocked, services are not.
@@ -271,14 +440,45 @@ export default function ItemMasterModule() {
     const handleDelete = useCallback(async () => {
         const targets = items.filter(i => checked.has(i.id));
         if (!targets.length) { setBanner({ tone: 'warn', text: 'Tick the items you want to delete.' }); return; }
+        // Ask the server what each item is actually used on before offering to
+        // retire it. An item on 47 bills is not the same decision as one that
+        // was created by mistake this morning, and the operator cannot tell them
+        // apart from a list screen.
+        let usedLines = [];
+        try {
+            const usages = await Promise.all(
+                targets.map(t => new PosItemUsageQuery().execute(t.id).catch(() => null)),
+            );
+            usedLines = targets
+                .map((t, i) => ({ t, u: usages[i] }))
+                .filter(x => x.u && x.u.total > 0)
+                .map(x => {
+                    const parts = [
+                        x.u.sales ? `${x.u.sales} sale(s)` : '',
+                        x.u.purchases ? `${x.u.purchases} purchase(s)` : '',
+                        x.u.returns ? `${x.u.returns} return(s)` : '',
+                        x.u.adjustments ? `${x.u.adjustments} adjustment(s)` : '',
+                    ].filter(Boolean).join(', ');
+                    return `• ${x.t.itemName} — used on ${parts}`;
+                });
+        } catch { /* usage is advisory; the server still refuses on its own */ }
+
+        const usedNote = usedLines.length
+            ? '\n\nSTILL IN USE:\n' + usedLines.join('\n')
+                + '\n\nThose documents keep working and nothing is deleted — the item is marked cancelled and old bills still print.'
+            : '';
+
         const ok = await confirm({
             title: targets.length > 1 ? `Delete ${targets.length} items?` : 'Delete item?',
-            message: `${targets.map(t => t.itemName).slice(0, 5).join('\n')}${targets.length > 5 ? `\n…and ${targets.length - 5} more` : ''}\n\nThis also removes the matching products from the Vendure catalog. It cannot be undone.`,
+            message: `${targets.map(t => t.itemName).slice(0, 5).join('\n')}${targets.length > 5 ? `\n…and ${targets.length - 5} more` : ''}${usedNote}\n\nThis also removes the matching products from the Vendure catalog. It cannot be undone.`,
             confirmLabel: 'Delete', tone: 'danger',
         });
         if (!ok) return;
         try {
-            for (const t of targets) await new DeleteItemEverywhereCommand().execute(t);
+            // confirmUsed carries the operator's answer to the notice above.
+            for (const t of targets) {
+                await new DeleteItemEverywhereCommand().execute({ ...t, confirmUsed: true });
+            }
             await loadAll();
             setChecked(new Set());
             setBanner({ tone: 'ok', text: `${targets.length} item${targets.length > 1 ? 's' : ''} deleted.` });
@@ -308,6 +508,7 @@ export default function ItemMasterModule() {
             {banner && <Banner tone={banner.tone} onClose={() => setBanner(null)}>{banner.text}</Banner>}
 
             <ListToolbar
+                autoFocus
                 search={search}
                 onSearch={setSearch}
                 placeholder="Search by name, SKU, barcode or brand…"
@@ -363,6 +564,7 @@ export default function ItemMasterModule() {
             {/* ── FORM OVERLAY ── */}
             {formOpen && (
                 <FormOverlay
+                    ref={flow.ref}
                     title={editingId ? form.itemName || 'Edit Item' : 'New Item'}
                     onClose={closeForm}
                     footer={<>
@@ -392,10 +594,48 @@ export default function ItemMasterModule() {
                             <Input value={form.code || ''} onChange={e => set('code', e.target.value)} />
                         </FormRow>
 
-                        <FormRow label="Unit">
-                            <SearchSelect value={form.unit} onChange={v => set('unit', v)} options={UNITS}
+                        <FormRow label="Base Unit" hint="Stock is held in this unit. Other units convert to it.">
+                            <SearchSelect value={form.unit} onChange={v => set('unit', v)} options={unitOptions}
                                 placeholder="Select or search" />
                         </FormRow>
+
+                        {form.type !== 'SERVICE' && (
+                            <FormRow label="Other Units"
+                                hint={form.unit
+                                    ? `How many ${form.unit} in one of each. A weight or volume rate is fixed by the unit master.`
+                                    : 'Choose a base unit first.'}>
+                                <div className="flex flex-col gap-1.5">
+                                    {extraUnits.map((u, idx) => (
+                                        <div key={idx} className="flex items-center gap-1.5">
+                                            <div className="w-40 shrink-0">
+                                                <SearchSelect
+                                                    value={u.unitCode}
+                                                    onChange={v => setExtraUnits(prev =>
+                                                        prev.map((x, i) => (i === idx ? { ...x, unitCode: v } : x)))}
+                                                    options={unitOptions.filter(o => o.value !== form.unit)}
+                                                    placeholder="Unit" />
+                                            </div>
+                                            <span className="text-[11px] text-[var(--pos-ink-3)] shrink-0">= </span>
+                                            <Input type="number" step="any" min="0" className="!w-28"
+                                                value={u.conversionRate ?? ''}
+                                                onChange={e => setExtraUnits(prev =>
+                                                    prev.map((x, i) => (i === idx ? { ...x, conversionRate: e.target.value } : x)))} />
+                                            <span className="text-[11px] text-[var(--pos-ink-3)] shrink-0">{form.unit || 'base'}</span>
+                                            <Button variant="ghost" size="sm"
+                                                onClick={() => setExtraUnits(prev => prev.filter((_, i) => i !== idx))}>
+                                                <Trash2 size={13} />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    <div>
+                                        <Button variant="default" size="sm" disabled={!form.unit}
+                                            onClick={() => setExtraUnits(prev => [...prev, { unitCode: '', conversionRate: '' }])}>
+                                            <Plus size={13} /> Add unit
+                                        </Button>
+                                    </div>
+                                </div>
+                            </FormRow>
+                        )}
 
                         {form.type !== 'SERVICE' && (
                             <FormRow label="HSN Code" hint="Required on GST invoices">
@@ -454,6 +694,80 @@ export default function ItemMasterModule() {
                             </ToggleSection>
                         </FormColumns>
 
+                        {form.type !== 'SERVICE' && priceListsOn && (<>
+                            <FormDivider />
+                            <FormBlockTitle>Price List</FormBlockTitle>
+                            <div className="pb-2">
+                                <p className="text-[12px] text-[var(--pos-ink-3)] mb-2">
+                                    A price per unit, per list. A 25 KG bag is not 25 times the kilo rate — set what you
+                                    actually charge. Leave the unit blank for a price that applies to any unit, scaled by
+                                    the conversion. Add a minimum quantity for a bulk break.
+                                </p>
+
+                                {!editingId && (
+                                    <p className="text-[12px] text-[var(--pos-ink-2)] mb-2">
+                                        Save the item first, then its prices can be added.
+                                    </p>
+                                )}
+
+                                {tiers.length > 0 && (
+                                    <table className="w-full text-[12.5px] mb-2">
+                                        <thead>
+                                            <tr className="text-[10.5px] uppercase tracking-wide text-[var(--pos-ink-3)] text-left">
+                                                <th className="py-1 font-semibold">List</th>
+                                                <th className="py-1 font-semibold">Unit</th>
+                                                <th className="py-1 font-semibold text-right">Rate</th>
+                                                <th className="py-1 font-semibold text-right">Min Qty</th>
+                                                <th />
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {tiers.map(t => (
+                                                <tr key={t.id} className="border-t border-[var(--pos-line-soft)]">
+                                                    <td className="py-1.5">{t.tierType === 'WHOLESALE' ? 'Wholesale' : 'Retail'}</td>
+                                                    <td className="py-1.5">{t.unitCode || 'Any'}</td>
+                                                    <td className="py-1.5 text-right" style={{ fontFamily: 'var(--pos-mono)' }}>{money(t.rate)}</td>
+                                                    <td className="py-1.5 text-right" style={{ fontFamily: 'var(--pos-mono)' }}>{t.minQty > 0 ? t.minQty : '—'}</td>
+                                                    <td className="py-1.5 text-right">
+                                                        <Button variant="ghost" size="sm" disabled={tierBusy}
+                                                            onClick={() => removeTier(t.id)}><Trash2 size={13} /></Button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+
+                                {tierDraft ? (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <div className="w-36">
+                                            <SearchSelect value={tierDraft.tierType}
+                                                onChange={v => setTierDraft(d => ({ ...d, tierType: v }))}
+                                                options={[{ value: 'SALE', label: 'Retail' }, { value: 'WHOLESALE', label: 'Wholesale' }]} />
+                                        </div>
+                                        <div className="w-52">
+                                            <SearchSelect value={tierDraft.unitCode}
+                                                onChange={v => setTierDraft(d => ({ ...d, unitCode: v }))}
+                                                options={priceUnitOptions} placeholder="Unit" />
+                                        </div>
+                                        <Input type="number" step="any" min="0" className="!w-28" placeholder="Rate"
+                                            value={tierDraft.rate}
+                                            onChange={e => setTierDraft(d => ({ ...d, rate: e.target.value }))} />
+                                        <Input type="number" step="any" min="0" className="!w-28" placeholder="Min qty"
+                                            value={tierDraft.minQty}
+                                            onChange={e => setTierDraft(d => ({ ...d, minQty: e.target.value }))} />
+                                        <Button variant="primary" size="sm" loading={tierBusy} onClick={addTier}>Add</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => setTierDraft(null)}>Cancel</Button>
+                                    </div>
+                                ) : (
+                                    <Button variant="default" size="sm" disabled={!editingId}
+                                        onClick={() => setTierDraft({ tierType: 'SALE', unitCode: form.unit || '', rate: '', minQty: '' })}>
+                                        <Plus size={13} /> Add price
+                                    </Button>
+                                )}
+                            </div>
+                        </>)}
+
                         <FormDivider />
 
                         <FormBlockTitle>Default Tax Rate</FormBlockTitle>
@@ -477,9 +791,11 @@ export default function ItemMasterModule() {
 
                                 {form.isStockBased && (
                                     <div className="sm:pl-[23px] mt-3">
-                                        <FormRow label="Barcode" labelWidth={150}>
-                                            <Input value={form.barcode || ''} onChange={e => set('barcode', e.target.value)} />
-                                        </FormRow>
+                                        {barcodeOn && (
+                                            <FormRow label="Barcode" labelWidth={150}>
+                                                <Input value={form.barcode || ''} onChange={e => set('barcode', e.target.value)} />
+                                            </FormRow>
+                                        )}
                                         <FormRow label="Reorder Level" labelWidth={150} hint="Warn when stock falls to this">
                                             <Input numeric type="number" step="any" min="0"
                                                 value={form.minStock ?? ''} onChange={e => set('minStock', e.target.value)} />
@@ -500,6 +816,15 @@ export default function ItemMasterModule() {
                                                 Track batch and expiry
                                             </label>
                                         </FormRow>
+                                        {form.allowExpiry && batchOn && (
+                                            <FormRow label="" labelWidth={150}>
+                                                <p className="text-[11.5px] text-[var(--pos-ink-3)] leading-relaxed py-1">
+                                                    Stock is held per batch. Every purchase of this item needs a batch
+                                                    number, and a sale takes the batch closest to expiring first.
+                                                    The dates below are only the defaults offered on a new purchase.
+                                                </p>
+                                            </FormRow>
+                                        )}
                                         {form.allowExpiry && (<>
                                             <FormRow label="Batch No" labelWidth={150}>
                                                 <Input value={form.batchNo || ''} onChange={e => set('batchNo', e.target.value)} />

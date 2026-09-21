@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { ListChecks, Search, Download, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
-import { ListPurchasesQuery } from '../../core/queries/pharma.query';
+import { ListPurchasesQuery } from '../../core/queries/pos.query';
 
 export default function PurchaseListModule() {
     const [purchases, setPurchases] = useState([]);

@@ -28,11 +28,16 @@ export const SIZE_PRESETS = {
     custom: { label: 'Custom', widthMm: 50, heightMm: 30 },
 };
 export const FONT_FAMILIES = ['Helvetica', 'Roboto', 'Courier', 'Times'];
+/*
+ * Thermal label printers. Every one of them is a roll, which is why choosing
+ * one also switches the template to roll output — the width alone was not
+ * enough, and a shop that picked "Zebra" was still getting sheet positioning.
+ */
 export const PRINTER_PRESETS = {
-    generic: { label: 'Generic Thermal', widthMm: 50 },
-    citizen: { label: 'Citizen', widthMm: 50 },
-    zebra: { label: 'Zebra', widthMm: 57 },
-    tsc: { label: 'TSC', widthMm: 50 },
+    generic: { label: 'Generic Thermal', widthMm: 50, roll: true },
+    citizen: { label: 'Citizen', widthMm: 50, roll: true },
+    zebra: { label: 'Zebra', widthMm: 57, roll: true },
+    tsc: { label: 'TSC', widthMm: 50, roll: true },
 };
 export const BARCODE_FORMATS = ['AUTO', 'EAN13', 'EAN8', 'CODE128'];
 
@@ -107,6 +112,13 @@ export function makeDefaultTemplate(name = 'Default') {
     }));
     return {
         name, printer: 'generic', size,
+        /*
+         * Roll by default: a shop buying a label printer buys a thermal roll
+         * one, and on a roll the page is one sticker. The grid below only
+         * applies in SHEET mode, and is kept so switching to A4 sheets does
+         * not mean re-entering it.
+         */
+        output: 'ROLL',
         layout: { perRow: 2, perColumn: 5, gapXmm: 2, gapYmm: 2, outer: { ...DEFAULT_OUTER }, inner },
         font: { family: 'Helvetica', size: 8, bold: false },
         barcode,
@@ -144,6 +156,16 @@ export function normalizeTemplate(t) {
     const base = makeDefaultTemplate(t.name || 'Template');
     const outer = t.layout?.outer || (t.layout?.marginMm != null ? { top: t.layout.marginMm, left: t.layout.marginMm, right: t.layout.marginMm, bottom: t.layout.marginMm } : { ...DEFAULT_OUTER });
     const inner = t.layout?.inner || { ...DEFAULT_INNER };
+    /*
+     * Templates saved before roll/sheet existed: infer it rather than guess.
+     * One with a thermal printer chosen was always meant for a roll — that is
+     * what the printer is — and treating it as a sheet is what put every
+     * sticker in the wrong place. With no printer chosen, keep the sheet grid
+     * it was drawn against rather than moving work the shop already lined up.
+     */
+    const output = t.output === 'ROLL' || t.output === 'SHEET'
+        ? t.output
+        : (PRINTER_PRESETS[t.printer]?.roll ? 'ROLL' : 'SHEET');
     const merged = {
         ...base, ...t,
         size: { ...base.size, ...t.size },
@@ -151,6 +173,7 @@ export function normalizeTemplate(t) {
         font: { ...base.font, ...t.font },
         barcode: { ...base.barcode, ...t.barcode, format: t.barcode?.format || 'AUTO' },
         printer: t.printer || base.printer,
+        output,
     };
     delete merged.layout.marginMm;
     const present = new Set((t.fields || []).filter((f) => !f.custom && !f.qr).map((f) => f.key));

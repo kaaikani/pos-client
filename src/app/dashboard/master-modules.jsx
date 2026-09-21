@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Percent, Receipt, Ruler, Tag, FolderTree, RefreshCw, Users, Plus, Trash2, Save, Edit3, Search, X } from 'lucide-react';
-import { ListItemsQuery } from '../../core/queries/pharma.query';
+import { ListItemsQuery } from '../../core/queries/pos.query';
 
 // ── Generic CRUD shell with localStorage persistence ──
 function useLocalList(key) {
